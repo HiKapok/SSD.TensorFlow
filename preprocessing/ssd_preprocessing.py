@@ -436,6 +436,8 @@ def preprocess_for_train(image, labels, bboxes, out_shape, data_format='channels
     # Rescale to VGG input scale.
     distort_image = tf.to_float(tf.image.convert_image_dtype(distort_image, orig_dtype, saturate=True))
     distort_image = _mean_image_subtraction(distort_image, [_R_MEAN, _G_MEAN, _B_MEAN])
+
+    distort_image.set_shape(out_shape + [3])
     # Image data format.
     if data_format == 'channels_first':
       distort_image = tf.transpose(distort_image, perm=(2, 0, 1))
@@ -454,7 +456,7 @@ def preprocess_for_eval(image, out_shape, data_format='channels_first', scope='s
   with tf.name_scope(scope, 'ssd_preprocessing_eval', [image]):
     image = tf.to_float(image)
     image = tf.image.resize_images(image, out_shape, method=tf.image.ResizeMethod.BILINEAR, align_corners=False)
-    image.set_shape([None, None, 3])
+    image.set_shape(out_shape + [3])
 
     image = _mean_image_subtraction(image, [_R_MEAN, _G_MEAN, _B_MEAN])
     # Image data format.

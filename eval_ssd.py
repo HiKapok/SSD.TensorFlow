@@ -30,10 +30,10 @@ from utility import scaffolds
 
 # hardware related configuration
 tf.app.flags.DEFINE_integer(
-    'num_readers', 8,
+    'num_readers', 16,
     'The number of parallel readers that read data from the dataset.')
 tf.app.flags.DEFINE_integer(
-    'num_preprocessing_threads', 24,
+    'num_preprocessing_threads', 48,
     'The number of threads used to create the batches.')
 tf.app.flags.DEFINE_integer(
     'num_cpu_threads', 0,
@@ -51,7 +51,7 @@ tf.app.flags.DEFINE_string(
     'The directory where the model will be stored.')
 tf.app.flags.DEFINE_integer(
     'log_every_n_steps', 10,
-    'The frequency with which logs are printed.')
+    'The frequency with which logs are print.')
 tf.app.flags.DEFINE_integer(
     'save_summary_steps', 500,
     'The frequency with which summaries are saved, in seconds.')
@@ -86,20 +86,6 @@ tf.app.flags.DEFINE_float(
 # optimizer related configuration
 tf.app.flags.DEFINE_float(
     'weight_decay', 5e-4, 'The weight decay on the model weights.')
-tf.app.flags.DEFINE_float(
-    'momentum', 0.9,
-    'The momentum for the MomentumOptimizer and RMSPropOptimizer.')
-tf.app.flags.DEFINE_float('learning_rate', 1e-4, 'Initial learning rate.')
-tf.app.flags.DEFINE_float(
-    'end_learning_rate', 0.000001,
-    'The minimal end learning rate used by a polynomial decay learning rate.')
-# for learning rate piecewise_constant decay
-tf.app.flags.DEFINE_string(
-    'decay_boundaries', '80000, 100000',
-    'Learning rate decay boundaries by global_step (comma-separated list).')
-tf.app.flags.DEFINE_string(
-    'lr_decay_factors', '1, 0.1, 0.01',
-    'The values of learning_rate decay factor for each segment between boundaries (comma-separated list).')
 # checkpoint related configuration
 tf.app.flags.DEFINE_string(
     'checkpoint_path', './model',
@@ -118,7 +104,7 @@ tf.app.flags.DEFINE_boolean(
     'When restoring a checkpoint would ignore missing variables.')
 
 FLAGS = tf.app.flags.FLAGS
-#CUDA_VISIBLE_DEVICES
+
 def validate_batch_size_for_multi_gpu(batch_size):
     """For multi-gpu, batch-size must be a multiple of the number of
     available GPUs.
@@ -150,12 +136,8 @@ def get_init_fn():
                                             FLAGS.checkpoint_exclude_scopes, FLAGS.ignore_missing_vars,
                                             name_remap={'/kernel': '/weights', '/bias': '/biases'})
 
-# couldn't find better way to pass params from input_fn to model_fn
-# some tensors used by model_fn must be created in input_fn to ensure they are in the same graph
-global_anchor_info = dict()
-
 def input_pipeline(dataset_pattern='train-*', is_training=True, batch_size=FLAGS.batch_size):
-    def input_fn(params):
+    def input_fn():
         out_shape = [FLAGS.train_image_size] * 2
         anchor_creator = anchor_manipulator.AnchorCreator(out_shape,
                                                     layers_shapes = [(38, 38), (19, 19), (10, 10), (5, 5), (3, 3), (1, 1)],
@@ -170,12 +152,14 @@ def input_pipeline(dataset_pattern='train-*', is_training=True, batch_size=FLAGS
             num_anchors_per_layer.append(all_num_anchors_depth[ind] * all_num_anchors_spatial[ind])
 
         anchor_encoder_decoder = anchor_manipulator.AnchorEncoder(allowed_borders = [1.0] * 6,
-                                                            positive_threshold = 0.5,
-                                                            ignore_threshold = 0.4,
-                                                            prior_scaling=[0.1, 0.1, 0.2, 0.2])
+                                                        positive_threshold = 0.5,
+                                                        ignore_threshold = 0.4,
+                                                        prior_scaling=[0.1, 0.1, 0.2, 0.2])
 
         image_preprocessing_fn = lambda image_, labels_, bboxes_ : ssd_preprocessing.preprocess_image(image_, labels_, bboxes_, out_shape, is_training=is_training, data_format=FLAGS.data_format)
         anchor_encoder_fn = lambda glabels_, gbboxes_: anchor_encoder_decoder.encode_all_anchors(glabels_, gbboxes_, all_anchors, all_num_anchors_depth, all_num_anchors_spatial)
+
+        anchors = anchor_encoder_decoder._all_anchors
 
         image, shape, loc_targets, cls_targets, match_scores = dataset_common.slim_get_batch(FLAGS.num_classes,
                                                                                 batch_size,
@@ -187,12 +171,10 @@ def input_pipeline(dataset_pattern='train-*', is_training=True, batch_size=FLAGS
                                                                                 anchor_encoder_fn,
                                                                                 num_epochs=FLAGS.train_epochs,
                                                                                 is_training=is_training)
-        global global_anchor_info
-        global_anchor_info = {'decode_fn': lambda pred : anchor_encoder_decoder.decode_all_anchors(pred, num_anchors_per_layer),
-                            'num_anchors_per_layer': num_anchors_per_layer,
-                            'all_num_anchors_depth': all_num_anchors_depth }
 
-        return image, {'shape': shape, 'loc_targets': loc_targets, 'cls_targets': cls_targets, 'match_scores': match_scores}
+        return image, {'shape': shape, 'decode_fn': lambda pred : anchor_encoder_decoder.decode_all_anchors(pred, num_anchors_per_layer),
+                        'num_anchors_per_layer': num_anchors_per_layer, 'all_num_anchors_depth': all_num_anchors_depth,
+                        'loc_targets': loc_targets, 'cls_targets': cls_targets, 'match_scores': match_scores}
     return input_fn
 
 def modified_smooth_l1(bbox_pred, bbox_targets, bbox_inside_weights=1., bbox_outside_weights=1., sigma=1.):
@@ -219,14 +201,12 @@ def modified_smooth_l1(bbox_pred, bbox_targets, bbox_inside_weights=1., bbox_out
 def ssd_model_fn(features, labels, mode, params):
     """model_fn for SSD to be used with our Estimator."""
     shape = labels['shape']
+    decode_fn = labels['decode_fn']
+    num_anchors_per_layer = labels['num_anchors_per_layer']
+    all_num_anchors_depth = labels['all_num_anchors_depth']
     loc_targets = labels['loc_targets']
     cls_targets = labels['cls_targets']
     match_scores = labels['match_scores']
-
-    global global_anchor_info
-    decode_fn = global_anchor_info['decode_fn']
-    num_anchors_per_layer = global_anchor_info['num_anchors_per_layer']
-    all_num_anchors_depth = global_anchor_info['all_num_anchors_depth']
 
     with tf.variable_scope(params['model_scope'], default_name=None, values=[features], reuse=tf.AUTO_REUSE):
         backbone = ssd_net.VGG16Backbone(params['data_format'])
@@ -290,6 +270,8 @@ def ssd_model_fn(features, labels, mode, params):
     if mode == tf.estimator.ModeKeys.PREDICT:
         return tf.estimator.EstimatorSpec(mode=mode, predictions=predictions)
 
+    #n_positives = tf.Print(n_positives,[n_positives])
+    float_n_positives = tf.stop_gradient(tf.cast(n_positives, tf.float32))
     # Calculate loss, which includes softmax cross entropy and L2 regularization.
     cross_entropy = (params['negative_ratio'] + 1.) * tf.cond(n_positives > 0, lambda: tf.losses.sparse_softmax_cross_entropy(labels=glabels, logits=cls_pred), lambda: 0.)
     # Create a tensor named cross_entropy for logging purposes.
@@ -377,14 +359,8 @@ def main(_):
             'match_threshold': FLAGS.match_threshold,
             'neg_threshold': FLAGS.neg_threshold,
             'weight_decay': FLAGS.weight_decay,
-            'momentum': FLAGS.momentum,
-            'learning_rate': FLAGS.learning_rate,
-            'end_learning_rate': FLAGS.end_learning_rate,
-            'decay_boundaries': parse_comma_list(FLAGS.decay_boundaries),
-            'lr_decay_factors': parse_comma_list(FLAGS.lr_decay_factors),
         })
     tensors_to_log = {
-        'lr': 'learning_rate',
         'ce': 'cross_entropy_loss',
         'loc': 'location_loss',
         'loss': 'total_loss',

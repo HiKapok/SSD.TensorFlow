@@ -53,9 +53,9 @@ _USE_FUSED_BN = True
 # vgg_16/conv3/conv3_3/biases
 # vgg_16/conv1/conv1_2/weights
 
-class ReLuLayer(tf.layers):
-    def __init__(self, name=None, **kwargs):
-        super(ReLuLayer, self).__init__(trainable=False, name=name, activity_regularizer=None, **kwargs)
+class ReLuLayer(tf.layers.Layer):
+    def __init__(self, name, **kwargs):
+        super(ReLuLayer, self).__init__(name=name, trainable=trainable, **kwargs)
         self._name = name
     def build(self, input_shape):
         self._relu = lambda x : tf.nn.relu(x, name=self._name)
@@ -67,6 +67,11 @@ class ReLuLayer(tf.layers):
     def compute_output_shape(self, input_shape):
         return tf.TensorShape(input_shape)
 
+def forward_module(m, inputs, training=False):
+    if isinstance(m, tf.layers.BatchNormalization) or isinstance(m, tf.layers.Dropout):
+        return m.apply(inputs, training=training)
+    return m.apply(inputs)
+
 class VGG16Backbone(object):
     def __init__(self, data_format='channels_first'):
         super(VGG16Backbone, self).__init__()
@@ -77,13 +82,13 @@ class VGG16Backbone(object):
         self._conv_bn_initializer = tf.glorot_uniform_initializer#lambda : tf.truncated_normal_initializer(mean=0.0, stddev=0.005)
         # VGG layers
         self._conv1_block = self.conv_block(2, 64, 3, (1, 1), 'conv1')
-        self._pool1 = tf.layers.MaxPooling2D(2, 2, padding='valid', data_format=self._data_format, name='pool1')
+        self._pool1 = tf.layers.MaxPooling2D(2, 2, padding='same', data_format=self._data_format, name='pool1')
         self._conv2_block = self.conv_block(2, 128, 3, (1, 1), 'conv2')
-        self._pool2 = tf.layers.MaxPooling2D(2, 2, padding='valid', data_format=self._data_format, name='pool2')
+        self._pool2 = tf.layers.MaxPooling2D(2, 2, padding='same', data_format=self._data_format, name='pool2')
         self._conv3_block = self.conv_block(3, 256, 3, (1, 1), 'conv3')
-        self._pool3 = tf.layers.MaxPooling2D(2, 2, padding='valid', data_format=self._data_format, name='pool3')
+        self._pool3 = tf.layers.MaxPooling2D(2, 2, padding='same', data_format=self._data_format, name='pool3')
         self._conv4_block = self.conv_block(3, 512, 3, (1, 1), 'conv4')
-        self._pool4 = tf.layers.MaxPooling2D(2, 2, padding='valid', data_format=self._data_format, name='pool4')
+        self._pool4 = tf.layers.MaxPooling2D(2, 2, padding='same', data_format=self._data_format, name='pool4')
         self._conv5_block = self.conv_block(3, 512, 3, (1, 1), 'conv5')
         self._pool5 = tf.layers.MaxPooling2D(3, 1, padding='same', data_format=self._data_format, name='pool5')
         self._conv6 = tf.layers.Conv2D(filters=1024, kernel_size=3, strides=1, padding='same', dilation_rate=6,
@@ -97,12 +102,13 @@ class VGG16Backbone(object):
                             bias_initializer=tf.zeros_initializer(),
                             name='fc7', _scope='fc7', _reuse=None)
         # SSD layers
-        self._conv8_block = self.ssd_conv_block(256, 2, 'conv8')
-        self._conv9_block = self.ssd_conv_block(128, 2, 'conv9')
-        self._conv10_block = self.ssd_conv_block(128, 1, 'conv10')
-        self._conv11_block = self.ssd_conv_block(128, 1, 'conv11')
+        with tf.variable_scope('additional_layers') as scope:
+            self._conv8_block = self.ssd_conv_block(256, 2, 'conv8')
+            self._conv9_block = self.ssd_conv_block(128, 2, 'conv9')
+            self._conv10_block = self.ssd_conv_block(128, 1, 'conv10', padding='valid')
+            self._conv11_block = self.ssd_conv_block(128, 1, 'conv11', padding='valid')
 
-    def forward(inputs, training=False):
+    def forward(self, inputs, training=False):
         # convert from RGB to BGR
         if self._data_format == 'channels_last':
             image_channels = tf.unstack(inputs, axis=-1, name='split_rgb')
@@ -113,58 +119,58 @@ class VGG16Backbone(object):
         feature_layers = []
         # forward vgg layers
         for conv in self._conv1_block:
-            inputs = conv.apply(inputs, training=training)
-        inputs = self._pool1.apply(inputs, training=training)
+            inputs = forward_module(conv, inputs, training=training)
+        inputs = self._pool1.apply(inputs)
         for conv in self._conv2_block:
-            inputs = conv.apply(inputs, training=training)
-        inputs = self._pool2.apply(inputs, training=training)
+            inputs = forward_module(conv, inputs, training=training)
+        inputs = self._pool2.apply(inputs)
         for conv in self._conv3_block:
-            inputs = conv.apply(inputs, training=training)
-        inputs = self._pool3.apply(inputs, training=training)
+            inputs = forward_module(conv, inputs, training=training)
+        inputs = self._pool3.apply(inputs)
         for conv in self._conv4_block:
-            inputs = conv.apply(inputs, training=training)
+            inputs = forward_module(conv, inputs, training=training)
         # conv4_3
-        with tf.name_scope('conv4_3_scale') as scope:
+        with tf.variable_scope('conv4_3_scale') as scope:
             weight_scale = tf.Variable([20.] * 512, trainable=training, name='weights')
             if self._data_format == 'channels_last':
                 weight_scale = tf.reshape(weight_scale, [1, 1, 1, -1], name='reshape')
             else:
                 weight_scale = tf.reshape(weight_scale, [1, -1, 1, 1], name='reshape')
 
-            feature_layers.append(tf.multiply(weight_scale, tf.nn.l2_normalize(inputs, axis=(-1 self._data_format == 'channels_last' else 1),
+            feature_layers.append(tf.multiply(weight_scale, tf.nn.l2_normalize(inputs, axis=(-1 if self._data_format == 'channels_last' else 1),
                                                         epsilon=1e-10, name='norm'), name='rescale')
                                 )
-        inputs = self._pool4.apply(inputs, training=training)
+        inputs = self._pool4.apply(inputs)
         for conv in self._conv5_block:
-            inputs = conv.apply(inputs, training=training)
-        inputs = self._pool5.apply(inputs, training=training)
+            inputs = forward_module(conv, inputs, training=training)
+        inputs = self._pool5.apply(inputs)
         # forward fc layers
-        inputs = self._conv6.apply(inputs, training=training)
-        inputs = self._conv7.apply(inputs, training=training)
+        inputs = self._conv6.apply(inputs)
+        inputs = self._conv7.apply(inputs)
         # fc7
         feature_layers.append(inputs)
         # forward ssd layers
         for layer in self._conv8_block:
-            inputs = layer.apply(inputs, training=training)
+            inputs = forward_module(layer, inputs, training=training)
         # conv8
         feature_layers.append(inputs)
         for layer in self._conv9_block:
-            inputs = layer.apply(inputs, training=training)
+            inputs = forward_module(layer, inputs, training=training)
         # conv9
         feature_layers.append(inputs)
         for layer in self._conv10_block:
-            inputs = layer.apply(inputs, training=training)
+            inputs = forward_module(layer, inputs, training=training)
         # conv10
         feature_layers.append(inputs)
         for layer in self._conv11_block:
-            inputs = layer.apply(inputs, training=training)
+            inputs = forward_module(layer, inputs, training=training)
         # conv11
         feature_layers.append(inputs)
 
         return feature_layers
 
-    def conv_block(num_blocks, filters, kernel_size, strides, name, reuse=None):
-        with tf.name_scope(name):
+    def conv_block(self, num_blocks, filters, kernel_size, strides, name, reuse=None):
+        with tf.variable_scope(name):
             conv_blocks = []
             for ind in range(1, num_blocks + 1):
                 conv_blocks.append(
@@ -176,18 +182,18 @@ class VGG16Backbone(object):
                     )
             return conv_blocks
 
-    def ssd_conv_block(filters, strides, name, reuse=None):
-        with tf.name_scope(name):
+    def ssd_conv_block(self, filters, strides, name, padding='same', reuse=None):
+        with tf.variable_scope(name):
             conv_blocks = []
             conv_blocks.append(
-                    tf.layers.Conv2D(filters=filters, kernel_size=1, strides=1, padding='same',
+                    tf.layers.Conv2D(filters=filters, kernel_size=1, strides=1, padding=padding,
                         data_format=self._data_format, activation=tf.nn.relu, use_bias=True,
                         kernel_initializer=self._conv_initializer(),
                         bias_initializer=tf.zeros_initializer(),
                         name='{}_1'.format(name), _scope='{}_1'.format(name), _reuse=None)
                 )
             conv_blocks.append(
-                    tf.layers.Conv2D(filters=filters * 2, kernel_size=3, strides=strides, padding='same',
+                    tf.layers.Conv2D(filters=filters * 2, kernel_size=3, strides=strides, padding=padding,
                         data_format=self._data_format, activation=tf.nn.relu, use_bias=True,
                         kernel_initializer=self._conv_initializer(),
                         bias_initializer=tf.zeros_initializer(),
@@ -195,8 +201,8 @@ class VGG16Backbone(object):
                 )
             return conv_blocks
 
-    def ssd_conv_bn_block(filters, strides, name, reuse=None):
-        with tf.name_scope(name):
+    def ssd_conv_bn_block(self, filters, strides, name, reuse=None):
+        with tf.variable_scope(name):
             conv_bn_blocks = []
             conv_bn_blocks.append(
                     tf.layers.Conv2D(filters=filters, kernel_size=1, strides=1, padding='same',
@@ -210,7 +216,7 @@ class VGG16Backbone(object):
                         name='{}_bn1'.format(name), _scope='{}_bn1'.format(name), _reuse=None)
                 )
             conv_bn_blocks.append(
-                    ReLuLayer(name='{}_relu1'.format(name), _scope='{}_relu1'.format(name), _reuse=None)
+                    ReLuLayer('{}_relu1'.format(name), _scope='{}_relu1'.format(name), _reuse=None)
                 )
             conv_bn_blocks.append(
                     tf.layers.Conv2D(filters=filters * 2, kernel_size=3, strides=strides, padding='same',
@@ -224,30 +230,26 @@ class VGG16Backbone(object):
                         name='{}_bn2'.format(name), _scope='{}_bn2'.format(name), _reuse=None)
                 )
             conv_bn_blocks.append(
-                    ReLuLayer(name='{}_relu2'.format(name), _scope='{}_relu2'.format(name), _reuse=None)
+                    ReLuLayer('{}_relu2'.format(name), _scope='{}_relu2'.format(name), _reuse=None)
                 )
             return conv_bn_blocks
 
-def multibox_head(feature_layers, num_classes, num_anchors_per_layer, data_format='channels_first'):
-    with tf.name_scope('multibox_head'):
+def multibox_head(feature_layers, num_classes, num_anchors_depth_per_layer, data_format='channels_first'):
+    with tf.variable_scope('multibox_head'):
         cls_preds = []
         loc_preds = []
         for ind, feat in enumerate(feature_layers):
-            loc_preds.append(tf.layers.conv2d(feat, num_anchors_per_layer[ind] * 4, (3, 3), use_bias=True,
-                    name='loc_'.format(ind), strides=(1, 1),
+            loc_preds.append(tf.layers.conv2d(feat, num_anchors_depth_per_layer[ind] * 4, (3, 3), use_bias=True,
+                    name='loc_{}'.format(ind), strides=(1, 1),
                     padding='same', data_format=data_format, activation=None,
                     kernel_initializer=tf.glorot_uniform_initializer(),
                     bias_initializer=tf.zeros_initializer()))
-            cls_preds.append(tf.layers.conv2d(feat, num_anchors_per_layer[ind] * num_classes, (3, 3), use_bias=True,
-                    name='cls_'.format(ind), strides=(1, 1),
+            cls_preds.append(tf.layers.conv2d(feat, num_anchors_depth_per_layer[ind] * num_classes, (3, 3), use_bias=True,
+                    name='cls_{}'.format(ind), strides=(1, 1),
                     padding='same', data_format=data_format, activation=None,
                     kernel_initializer=tf.glorot_uniform_initializer(),
                     bias_initializer=tf.zeros_initializer()))
 
-        trans_perm = [0, 2, 3, 1] if data_format=='channels_first' else [0, 1, 2, 3]
-        return tf.transpose(tf.concat(loc_preds, axis=(1 if data_format=='channels_first' else -1), name='loc_concat'),
-                perm=trans_perm, name='loc_transpose'),\
-            tf.transpose(tf.concat(cls_preds, axis=(1 if data_format=='channels_first' else -1), name='cls_concat'),
-                perm=trans_perm, name='cls_transpose')
+        return loc_preds, cls_preds
 
 

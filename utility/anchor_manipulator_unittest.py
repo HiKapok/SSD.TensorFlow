@@ -23,7 +23,8 @@ from scipy.misc import imread, imsave, imshow, imresize
 import numpy as np
 import sys; sys.path.insert(0, ".")
 from utility import draw_toolbox
-import ssd_preprocessing
+from utility import anchor_manipulator
+from preprocessing import ssd_preprocessing
 
 slim = tf.contrib.slim
 
@@ -90,12 +91,38 @@ def slim_get_split(file_pattern='{}_????'):
                                                                          'object/difficult'])
     image, glabels, gbboxes = ssd_preprocessing.preprocess_image(org_image, glabels_raw, gbboxes_raw, [300, 300], is_training=True, data_format='channels_first')
 
+    anchor_creator = anchor_manipulator.AnchorCreator([300] * 2,
+                                                    layers_shapes = [(38, 38), (19, 19), (10, 10), (5, 5), (3, 3), (1, 1)],
+                                                    anchor_scales = [(0.1,), (0.2,), (0.375,), (0.55,), (0.725,), (0.9,)],
+                                                    extra_anchor_scales = [(0.1414,), (0.2739,), (0.4541,), (0.6315,), (0.8078,), (0.9836,)],
+                                                    anchor_ratios = [(2., .5), (2., 3., .5, 0.3333), (2., 3., .5, 0.3333), (2., 3., .5, 0.3333), (2., .5), (2., .5)],
+                                                    layer_steps = [8, 16, 32, 64, 100, 300])
+
+    all_anchors, all_num_anchors_depth, all_num_anchors_spatial = anchor_creator.get_all_anchors()
+
+    num_anchors_per_layer = []
+    for ind in range(len(all_anchors)):
+        num_anchors_per_layer.append(all_num_anchors_depth[ind] * all_num_anchors_spatial[ind])
+
+    anchor_encoder_decoder = anchor_manipulator.AnchorEncoder(allowed_borders=[1.0] * 6,
+                                                        positive_threshold = 0.5,
+                                                        ignore_threshold = 0.4,
+                                                        prior_scaling=[0.1, 0.1, 0.2, 0.2])
+
+    gt_targets, gt_labels, gt_scores = anchor_encoder_decoder.encode_all_anchors(glabels, gbboxes, all_anchors, all_num_anchors_depth, all_num_anchors_spatial, True)
+    anchors = anchor_encoder_decoder._all_anchors
+    # split by layers
+    gt_targets, gt_labels, gt_scores, anchors = tf.split(gt_targets, num_anchors_per_layer, axis=0),\
+                                                tf.split(gt_labels, num_anchors_per_layer, axis=0),\
+                                                tf.split(gt_scores, num_anchors_per_layer, axis=0),\
+                                                [tf.split(anchor, num_anchors_per_layer, axis=0) for anchor in anchors]
+
     image = tf.transpose(image, perm=(1, 2, 0))
     save_image_op = tf.py_func(save_image_with_bbox,
                             [ssd_preprocessing.unwhiten_image(image),
-                            tf.clip_by_value(glabels, 0, tf.int64.max),
-                            tf.ones_like(glabels),
-                            gbboxes],
+                            tf.clip_by_value(gt_labels[5], 0, tf.int64.max),
+                            gt_scores[5],
+                            gt_targets[5]],
                             tf.int64, stateful=True)
     return save_image_op
 
