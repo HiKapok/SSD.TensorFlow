@@ -43,6 +43,7 @@ def slim_get_split(file_pattern='{}_????'):
     keys_to_features = {
         'image/encoded': tf.FixedLenFeature((), tf.string, default_value=''),
         'image/format': tf.FixedLenFeature((), tf.string, default_value='jpeg'),
+        'image/filename': tf.FixedLenFeature((), tf.string, default_value=''),
         'image/height': tf.FixedLenFeature([1], tf.int64),
         'image/width': tf.FixedLenFeature([1], tf.int64),
         'image/channels': tf.FixedLenFeature([1], tf.int64),
@@ -57,6 +58,7 @@ def slim_get_split(file_pattern='{}_????'):
     }
     items_to_handlers = {
         'image': slim.tfexample_decoder.Image('image/encoded', 'image/format'),
+        'filename': slim.tfexample_decoder.Tensor('image/filename'),
         'shape': slim.tfexample_decoder.Tensor('image/shape'),
         'object/bbox': slim.tfexample_decoder.BoundingBox(
                 ['ymin', 'xmin', 'ymax', 'xmax'], 'image/object/bbox/'),
@@ -84,7 +86,7 @@ def slim_get_split(file_pattern='{}_????'):
                     shuffle=True,
                     num_epochs=1)
 
-    [org_image, shape, glabels_raw, gbboxes_raw, isdifficult] = provider.get(['image', 'shape',
+    [org_image, filename, shape, glabels_raw, gbboxes_raw, isdifficult] = provider.get(['image', 'filename', 'shape',
                                                                          'object/label',
                                                                          'object/bbox',
                                                                          'object/difficult'])

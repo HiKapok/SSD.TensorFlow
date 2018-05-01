@@ -30,16 +30,18 @@ import tensorflow as tf
 import dataset_common
 
 '''How to order your dataset:
-dataset_directory
-  VOC2007 --> train_splits
-    Annotations
-    ...
-  VOC2012 --> train_splits
-    Annotations
-    ...
-  VOC2007TEST --> validation_splits
-    Annotations
-    ...
+  VOCROOT/
+       |->VOC2007/
+       |    |->Annotations/
+       |    |->ImageSets/
+       |    |->...
+       |->VOC2012/
+       |    |->Annotations/
+       |    |->ImageSets/
+       |    |->...
+       |->VOC2007TEST/
+       |    |->Annotations/
+       |    |->...
 '''
 tf.app.flags.DEFINE_string('dataset_directory', '/media/rs/7A0EE8880EE83EAF/Detections/PASCAL/VOC',
                            'All datas directory')
@@ -51,7 +53,7 @@ tf.app.flags.DEFINE_string('output_directory', '/media/rs/7A0EE8880EE83EAF/Detec
                            'Output data directory')
 tf.app.flags.DEFINE_integer('train_shards', 16,
                             'Number of shards in training TFRecord files.')
-tf.app.flags.DEFINE_integer('validation_shards', 8,
+tf.app.flags.DEFINE_integer('validation_shards', 1600,
                             'Number of shards in validation TFRecord files.')
 tf.app.flags.DEFINE_integer('num_threads', 8,
                             'Number of threads to preprocess the images.')
@@ -85,7 +87,7 @@ def _bytes_feature(value):
     value = six.binary_type(value, encoding='utf-8')
   return tf.train.Feature(bytes_list=tf.train.BytesList(value=[value]))
 
-def _convert_to_example(filename, image_buffer, bboxes, labels, labels_text,
+def _convert_to_example(filename, image_name, image_buffer, bboxes, labels, labels_text,
                         difficult, truncated, height, width):
   """Build an Example proto for an example.
 
@@ -128,6 +130,7 @@ def _convert_to_example(filename, image_buffer, bboxes, labels, labels_text,
             'image/object/bbox/difficult': _int64_feature(difficult),
             'image/object/bbox/truncated': _int64_feature(truncated),
             'image/format': _bytes_feature(image_format),
+            'image/filename': _bytes_feature(image_name.encode('utf8')),
             'image/encoded': _bytes_feature(image_buffer)}))
   return example
 
@@ -291,7 +294,7 @@ def _process_image_files_batch(coder, thread_index, ranges, name, directory, all
       bboxes, labels, labels_text, difficult, truncated = _find_image_bounding_boxes(directory, cur_record)
       image_buffer, height, width = _process_image(filename, coder)
 
-      example = _convert_to_example(filename, image_buffer, bboxes, labels, labels_text,
+      example = _convert_to_example(filename, cur_record[1], image_buffer, bboxes, labels, labels_text,
                                     difficult, truncated, height, width)
       writer.write(example.SerializeToString())
       shard_counter += 1

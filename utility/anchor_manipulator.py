@@ -198,6 +198,41 @@ class AnchorEncoder(object):
 
             return tf.split(tf.stack(self.center2point(pred_cy, pred_cx, pred_h, pred_w), axis=-1), num_anchors_per_layer, axis=0)
 
+    def ext_decode_all_anchors(self, pred_location, all_anchors, all_num_anchors_depth, all_num_anchors_spatial):
+        assert (len(all_num_anchors_depth)==len(all_num_anchors_spatial)) and (len(all_num_anchors_depth)==len(all_anchors)), 'inconsist num layers for anchors.'
+        with tf.name_scope('ext_decode_all_anchors', [pred_location]):
+            num_anchors_per_layer = []
+            for ind in range(len(all_anchors)):
+                num_anchors_per_layer.append(all_num_anchors_depth[ind] * all_num_anchors_spatial[ind])
+
+            num_layers = len(all_num_anchors_depth)
+            list_anchors_ymin = []
+            list_anchors_xmin = []
+            list_anchors_ymax = []
+            list_anchors_xmax = []
+            tiled_allowed_borders = []
+            for ind, anchor in enumerate(all_anchors):
+                anchors_ymin_, anchors_xmin_, anchors_ymax_, anchors_xmax_ = self.center2point(anchor[0], anchor[1], anchor[2], anchor[3])
+
+                list_anchors_ymin.append(tf.reshape(anchors_ymin_, [-1]))
+                list_anchors_xmin.append(tf.reshape(anchors_xmin_, [-1]))
+                list_anchors_ymax.append(tf.reshape(anchors_ymax_, [-1]))
+                list_anchors_xmax.append(tf.reshape(anchors_xmax_, [-1]))
+
+            anchors_ymin = tf.concat(list_anchors_ymin, 0, name='concat_ymin')
+            anchors_xmin = tf.concat(list_anchors_xmin, 0, name='concat_xmin')
+            anchors_ymax = tf.concat(list_anchors_ymax, 0, name='concat_ymax')
+            anchors_xmax = tf.concat(list_anchors_xmax, 0, name='concat_xmax')
+
+            anchor_cy, anchor_cx, anchor_h, anchor_w = self.point2center(anchors_ymin, anchors_xmin, anchors_ymax, anchors_xmax)
+
+            pred_h = tf.exp(pred_location[:,-2] * self._prior_scaling[2]) * anchor_h
+            pred_w = tf.exp(pred_location[:, -1] * self._prior_scaling[3]) * anchor_w
+            pred_cy = pred_location[:, 0] * self._prior_scaling[0] * anchor_h + anchor_cy
+            pred_cx = pred_location[:, 1] * self._prior_scaling[1] * anchor_w + anchor_cx
+
+            return tf.split(tf.stack(self.center2point(pred_cy, pred_cx, pred_h, pred_w), axis=-1), num_anchors_per_layer, axis=0)
+
 class AnchorCreator(object):
     def __init__(self, img_shape, layers_shapes, anchor_scales, extra_anchor_scales, anchor_ratios, layer_steps):
         super(AnchorCreator, self).__init__()

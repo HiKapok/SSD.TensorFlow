@@ -159,6 +159,7 @@ def slim_get_batch(num_classes, batch_size, split_name, file_pattern, num_reader
     keys_to_features = {
         'image/encoded': tf.FixedLenFeature((), tf.string, default_value=''),
         'image/format': tf.FixedLenFeature((), tf.string, default_value='jpeg'),
+        'image/filename': tf.FixedLenFeature((), tf.string, default_value=''),
         'image/height': tf.FixedLenFeature([1], tf.int64),
         'image/width': tf.FixedLenFeature([1], tf.int64),
         'image/channels': tf.FixedLenFeature([1], tf.int64),
@@ -173,6 +174,7 @@ def slim_get_batch(num_classes, batch_size, split_name, file_pattern, num_reader
     }
     items_to_handlers = {
         'image': slim.tfexample_decoder.Image('image/encoded', 'image/format'),
+        'filename': slim.tfexample_decoder.Tensor('image/filename'),
         'shape': slim.tfexample_decoder.Tensor('image/shape'),
         'object/bbox': slim.tfexample_decoder.BoundingBox(
                 ['ymin', 'xmin', 'ymax', 'xmax'], 'image/object/bbox/'),
@@ -204,7 +206,7 @@ def slim_get_batch(num_classes, batch_size, split_name, file_pattern, num_reader
             shuffle=is_training,
             num_epochs=num_epochs)
 
-    [org_image, shape, glabels_raw, gbboxes_raw, isdifficult] = provider.get(['image', 'shape',
+    [org_image, filename, shape, glabels_raw, gbboxes_raw, isdifficult] = provider.get(['image', 'filename', 'shape',
                                                                      'object/label',
                                                                      'object/bbox',
                                                                      'object/difficult'])
@@ -227,7 +229,7 @@ def slim_get_batch(num_classes, batch_size, split_name, file_pattern, num_reader
 
     gt_targets, gt_labels, gt_scores = anchor_encoder(glabels, gbboxes)
 
-    return tf.train.batch([image, shape, gt_targets, gt_labels, gt_scores],
+    return tf.train.batch([image, filename, shape, gt_targets, gt_labels, gt_scores],
                         dynamic_pad=False,
                         batch_size=batch_size,
                         allow_smaller_final_batch=(not is_training),

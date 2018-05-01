@@ -152,10 +152,12 @@ def get_init_fn():
 
 # couldn't find better way to pass params from input_fn to model_fn
 # some tensors used by model_fn must be created in input_fn to ensure they are in the same graph
+# but when we put these tensors to labels's dict, the replicate_model_fn will split them into each GPU
+# the problem is that they shouldn't be splited
 global_anchor_info = dict()
 
 def input_pipeline(dataset_pattern='train-*', is_training=True, batch_size=FLAGS.batch_size):
-    def input_fn(params):
+    def input_fn():
         out_shape = [FLAGS.train_image_size] * 2
         anchor_creator = anchor_manipulator.AnchorCreator(out_shape,
                                                     layers_shapes = [(38, 38), (19, 19), (10, 10), (5, 5), (3, 3), (1, 1)],
@@ -177,7 +179,7 @@ def input_pipeline(dataset_pattern='train-*', is_training=True, batch_size=FLAGS
         image_preprocessing_fn = lambda image_, labels_, bboxes_ : ssd_preprocessing.preprocess_image(image_, labels_, bboxes_, out_shape, is_training=is_training, data_format=FLAGS.data_format)
         anchor_encoder_fn = lambda glabels_, gbboxes_: anchor_encoder_decoder.encode_all_anchors(glabels_, gbboxes_, all_anchors, all_num_anchors_depth, all_num_anchors_spatial)
 
-        image, shape, loc_targets, cls_targets, match_scores = dataset_common.slim_get_batch(FLAGS.num_classes,
+        image, _, shape, loc_targets, cls_targets, match_scores = dataset_common.slim_get_batch(FLAGS.num_classes,
                                                                                 batch_size,
                                                                                 ('train' if is_training else 'val'),
                                                                                 os.path.join(FLAGS.data_dir, dataset_pattern),
@@ -391,7 +393,8 @@ def main(_):
         'l2': 'l2_loss',
         'acc': 'cls_accuracy',
     }
-    logging_hook = tf.train.LoggingTensorHook(tensors=tensors_to_log, every_n_iter=FLAGS.log_every_n_steps, formatter=lambda dicts: (', '.join(['%s=%.6f' % (k, v) for k, v in dicts.items()])))
+    logging_hook = tf.train.LoggingTensorHook(tensors=tensors_to_log, every_n_iter=FLAGS.log_every_n_steps,
+                                            formatter=lambda dicts: (', '.join(['%s=%.6f' % (k, v) for k, v in dicts.items()])))
 
     #hook = tf.train.ProfilerHook(save_steps=50, output_dir='.')
     print('Starting a training cycle.')
