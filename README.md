@@ -33,6 +33,7 @@ There are already some TensorFlow based SSD reimplementation codes on GitHub, th
 	```sh
 	python dataset/convert_tfrecords.py --dataset_directory=VOCROOT --output_directory=./dataset/tfrecords
 	```
+- Download the pre-trained VGG-16 model from [here](https://drive.google.com/drive/folders/184srhbt8_uvLKeWW_Yo8Mc5wTyc0lJT7) and put them into one sub-directory named 'model'.
 - Run the following script to start training:
 
 	```sh
@@ -52,7 +53,7 @@ There are already some TensorFlow based SSD reimplementation codes on GitHub, th
 
 All the codes was tested under TensorFlow 1.6, Python 3.5, Ubuntu 16.04 with CUDA 8.0. The training is now still in processing, and the performance will be reported after the first training.
 
-This repo is just created recently, any contributions to this repo is welcomed.
+This repo is just created recently, any contribution will be welcomed.
 
 ## ##
 Apache License, Version 2.0
