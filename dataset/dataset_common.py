@@ -221,6 +221,7 @@ def slim_get_batch(num_classes, batch_size, split_name, file_pattern, num_reader
         gbboxes_raw = tf.boolean_mask(gbboxes_raw, isdifficult_mask)
 
     # Pre-processing image, labels and bboxes.
+
     if is_training:
         image, glabels, gbboxes = image_preprocessing_fn(org_image, glabels_raw, gbboxes_raw)
     else:
@@ -230,8 +231,8 @@ def slim_get_batch(num_classes, batch_size, split_name, file_pattern, num_reader
     gt_targets, gt_labels, gt_scores = anchor_encoder(glabels, gbboxes)
 
     return tf.train.batch([image, filename, shape, gt_targets, gt_labels, gt_scores],
-                        dynamic_pad=False,
-                        batch_size=batch_size,
-                        allow_smaller_final_batch=(not is_training),
-                        num_threads=num_preprocessing_threads,
-                        capacity=64 * batch_size)
+                    dynamic_pad=False,
+                    batch_size=batch_size,
+                    allow_smaller_final_batch=(not is_training),
+                    num_threads=num_preprocessing_threads,
+                    capacity=64 * batch_size)

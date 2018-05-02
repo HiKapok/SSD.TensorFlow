@@ -246,61 +246,73 @@ def ssd_model_fn(features, labels, mode, params):
         cls_pred = tf.concat(cls_pred, axis=0)
         location_pred = tf.concat(location_pred, axis=0)
 
-    #bboxes_pred = decode_fn(location_pred)
-    bboxes_pred = tf.map_fn(lambda _preds : decode_fn(_preds),
-                            tf.reshape(location_pred, [tf.shape(features)[0], -1, 4]),
-                            dtype=[tf.float32] * len(num_anchors_per_layer), back_prop=False)
-    #cls_targets = tf.Print(cls_targets, [tf.shape(bboxes_pred[0]),tf.shape(bboxes_pred[1]),tf.shape(bboxes_pred[2]),tf.shape(bboxes_pred[3])])
-    bboxes_pred = [tf.reshape(preds, [-1, 4]) for preds in bboxes_pred]
-    bboxes_pred = tf.concat(bboxes_pred, axis=0)
+    with tf.device('/cpu:0'):
+        with tf.control_dependencies([cls_pred, location_pred]):
+            with tf.name_scope('post_forward'):
+                #bboxes_pred = decode_fn(location_pred)
+                bboxes_pred = tf.map_fn(lambda _preds : decode_fn(_preds),
+                                        tf.reshape(location_pred, [tf.shape(features)[0], -1, 4]),
+                                        dtype=[tf.float32] * len(num_anchors_per_layer), back_prop=False)
+                #cls_targets = tf.Print(cls_targets, [tf.shape(bboxes_pred[0]),tf.shape(bboxes_pred[1]),tf.shape(bboxes_pred[2]),tf.shape(bboxes_pred[3])])
+                bboxes_pred = [tf.reshape(preds, [-1, 4]) for preds in bboxes_pred]
+                bboxes_pred = tf.concat(bboxes_pred, axis=0)
 
-    cls_targets = tf.reshape(cls_targets, [-1])
-    match_scores = tf.reshape(match_scores, [-1])
-    loc_targets = tf.reshape(loc_targets, [-1, 4])
+                cls_targets = tf.reshape(cls_targets, [-1])
+                match_scores = tf.reshape(match_scores, [-1])
+                loc_targets = tf.reshape(loc_targets, [-1, 4])
 
-    # each positive examples has one label
-    positive_mask = cls_targets > 0
-    n_positives = tf.count_nonzero(positive_mask)
+                # each positive examples has one label
+                positive_mask = cls_targets > 0
+                n_positives = tf.count_nonzero(positive_mask)
 
-    negtive_mask = tf.logical_and(tf.equal(cls_targets, 0), match_scores > 0.)
-    n_negtives = tf.count_nonzero(negtive_mask)
+                negtive_mask = tf.logical_and(tf.equal(cls_targets, 0), match_scores > 0.)
+                n_negtives = tf.count_nonzero(negtive_mask)
 
-    n_neg_to_select = tf.cast(params['negative_ratio'] * tf.cast(n_positives, tf.float32), tf.int32)
-    n_neg_to_select = tf.minimum(n_neg_to_select, tf.cast(n_negtives, tf.int32))
+                n_neg_to_select = tf.cast(params['negative_ratio'] * tf.cast(n_positives, tf.float32), tf.int32)
+                n_neg_to_select = tf.minimum(n_neg_to_select, tf.cast(n_negtives, tf.int32))
 
-    # hard negative mining for classification
-    predictions_for_bg = tf.nn.softmax(cls_pred)[:, 0]
-    prob_for_negtives = tf.where(negtive_mask,
-                           0. - predictions_for_bg,
-                           # ignore all the positives
-                           0. - tf.ones_like(predictions_for_bg))
-    topk_prob_for_bg, _ = tf.nn.top_k(prob_for_negtives, k=n_neg_to_select)
-    selected_neg_mask = prob_for_negtives > topk_prob_for_bg[-1]
+                # hard negative mining for classification
+                predictions_for_bg = tf.nn.softmax(cls_pred)[:, 0]
+                prob_for_negtives = tf.where(negtive_mask,
+                                       0. - predictions_for_bg,
+                                       # ignore all the positives
+                                       0. - tf.ones_like(predictions_for_bg))
+                topk_prob_for_bg, _ = tf.nn.top_k(prob_for_negtives, k=n_neg_to_select)
+                selected_neg_mask = prob_for_negtives > topk_prob_for_bg[-1]
 
-    # include both selected negtive and all positive examples
-    final_mask = tf.stop_gradient(tf.logical_or(tf.logical_and(negtive_mask, selected_neg_mask), positive_mask))
-    total_examples = tf.count_nonzero(final_mask)
+                # include both selected negtive and all positive examples
+                final_mask = tf.stop_gradient(tf.logical_or(tf.logical_and(negtive_mask, selected_neg_mask), positive_mask))
+                total_examples = tf.count_nonzero(final_mask)
 
-    glabels = tf.boolean_mask(tf.clip_by_value(cls_targets, 0, FLAGS.num_classes), tf.stop_gradient(final_mask))
-    cls_pred = tf.boolean_mask(cls_pred, tf.stop_gradient(final_mask))
-    location_pred = tf.boolean_mask(location_pred, tf.stop_gradient(positive_mask))
-    loc_targets = tf.boolean_mask(loc_targets, tf.stop_gradient(positive_mask))
+                glabels = tf.boolean_mask(tf.clip_by_value(cls_targets, 0, FLAGS.num_classes), tf.stop_gradient(final_mask))
+                cls_pred = tf.boolean_mask(cls_pred, tf.stop_gradient(final_mask))
+                location_pred = tf.boolean_mask(location_pred, tf.stop_gradient(positive_mask))
+                loc_targets = tf.boolean_mask(loc_targets, tf.stop_gradient(positive_mask))
 
-    predictions = {
-        'classes': tf.argmax(cls_pred, axis=-1),
-        'probabilities': tf.reduce_max(tf.nn.softmax(cls_pred, name='softmax_tensor'), axis=-1),
-        'loc_predict': bboxes_pred }
+                predictions = {
+                            'classes': tf.argmax(cls_pred, axis=-1),
+                            'probabilities': tf.reduce_max(tf.nn.softmax(cls_pred, name='softmax_tensor'), axis=-1),
+                            'loc_predict': bboxes_pred }
+
+                cls_accuracy = tf.metrics.accuracy(glabels, predictions['classes'])
+                metrics = {'cls_accuracy': cls_accuracy}
+
+                # Create a tensor named train_accuracy for logging purposes.
+                tf.identity(cls_accuracy[1], name='cls_accuracy')
+                tf.summary.scalar('cls_accuracy', cls_accuracy[1])
 
     if mode == tf.estimator.ModeKeys.PREDICT:
         return tf.estimator.EstimatorSpec(mode=mode, predictions=predictions)
 
     # Calculate loss, which includes softmax cross entropy and L2 regularization.
-    cross_entropy = tf.cond(n_positives > 0, lambda: tf.losses.sparse_softmax_cross_entropy(labels=glabels, logits=cls_pred), lambda: 0.)# * (params['negative_ratio'] + 1.)
+    #cross_entropy = tf.cond(n_positives > 0, lambda: tf.losses.sparse_softmax_cross_entropy(labels=glabels, logits=cls_pred), lambda: 0.)# * (params['negative_ratio'] + 1.)
+    cross_entropy = tf.losses.sparse_softmax_cross_entropy(labels=glabels, logits=cls_pred)# * (params['negative_ratio'] + 1.)
     # Create a tensor named cross_entropy for logging purposes.
     tf.identity(cross_entropy, name='cross_entropy_loss')
     tf.summary.scalar('cross_entropy_loss', cross_entropy)
 
-    loc_loss = tf.cond(n_positives > 0, lambda: modified_smooth_l1(location_pred, tf.stop_gradient(loc_targets), sigma=1.), lambda: tf.zeros_like(location_pred))
+    #loc_loss = tf.cond(n_positives > 0, lambda: modified_smooth_l1(location_pred, tf.stop_gradient(loc_targets), sigma=1.), lambda: tf.zeros_like(location_pred))
+    loc_loss = modified_smooth_l1(location_pred, tf.stop_gradient(loc_targets), sigma=1.)
     #loc_loss = modified_smooth_l1(location_pred, tf.stop_gradient(gtargets))
     loc_loss = tf.reduce_mean(tf.reduce_sum(loc_loss, axis=-1), name='location_loss')
     tf.summary.scalar('location_loss', loc_loss)
@@ -331,13 +343,6 @@ def ssd_model_fn(features, labels, mode, params):
             train_op = optimizer.minimize(total_loss, global_step)
     else:
         train_op = None
-
-    cls_accuracy = tf.metrics.accuracy(glabels, predictions['classes'])
-    metrics = {'cls_accuracy': cls_accuracy}
-
-    # Create a tensor named train_accuracy for logging purposes.
-    tf.identity(cls_accuracy[1], name='cls_accuracy')
-    tf.summary.scalar('cls_accuracy', cls_accuracy[1])
 
     return tf.estimator.EstimatorSpec(
                               mode=mode,
@@ -393,12 +398,12 @@ def main(_):
         'loc': 'location_loss',
         'loss': 'total_loss',
         'l2': 'l2_loss',
-        'acc': 'cls_accuracy',
+        'acc': 'post_forward/cls_accuracy',
     }
     logging_hook = tf.train.LoggingTensorHook(tensors=tensors_to_log, every_n_iter=FLAGS.log_every_n_steps,
                                             formatter=lambda dicts: (', '.join(['%s=%.6f' % (k, v) for k, v in dicts.items()])))
 
-    #hook = tf.train.ProfilerHook(save_steps=50, output_dir='.', show_memory=False)
+    #hook = tf.train.ProfilerHook(save_steps=50, output_dir='.', show_memory=True)
     print('Starting a training cycle.')
     ssd_detector.train(input_fn=input_pipeline(dataset_pattern='train-*', is_training=True, batch_size=FLAGS.batch_size),
                     hooks=[logging_hook], max_steps=FLAGS.max_number_of_steps)

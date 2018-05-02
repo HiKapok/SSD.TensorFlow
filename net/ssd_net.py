@@ -137,7 +137,7 @@ class VGG16Backbone(object):
             else:
                 weight_scale = tf.reshape(weight_scale, [1, -1, 1, 1], name='reshape')
 
-            feature_layers.append(tf.multiply(weight_scale, tf.nn.l2_normalize(inputs, axis=(-1 if self._data_format == 'channels_last' else 1),
+            feature_layers.append(tf.multiply(weight_scale, tf.nn.l2_normalize(inputs, (-1 if self._data_format == 'channels_last' else 1),
                                                         epsilon=1e-10, name='norm'), name='rescale')
                                 )
         inputs = self._pool4.apply(inputs)
