@@ -137,8 +137,8 @@ def input_pipeline(dataset_pattern='train-*', is_training=True, batch_size=FLAGS
             num_anchors_per_layer.append(all_num_anchors_depth[ind] * all_num_anchors_spatial[ind])
 
         anchor_encoder_decoder = anchor_manipulator.AnchorEncoder(allowed_borders = [1.0] * 6,
-                                                            positive_threshold = 0.5,
-                                                            ignore_threshold = 0.4,
+                                                            positive_threshold = FLAGS.match_threshold,
+                                                            ignore_threshold = FLAGS.neg_threshold,
                                                             prior_scaling=[0.1, 0.1, 0.2, 0.2])
 
         image_preprocessing_fn = lambda image_, labels_, bboxes_ : ssd_preprocessing.preprocess_image(image_, labels_, bboxes_, out_shape, is_training=is_training, data_format=FLAGS.data_format)
@@ -444,6 +444,3 @@ def main(_):
 if __name__ == '__main__':
   tf.logging.set_verbosity(tf.logging.INFO)
   tf.app.run()
-
-
-

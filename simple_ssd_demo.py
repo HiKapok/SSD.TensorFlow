@@ -44,7 +44,7 @@ tf.app.flags.DEFINE_string(
     'with CPU. If left unspecified, the data format will be chosen '
     'automatically based on whether TensorFlow was built for CPU or GPU.')
 tf.app.flags.DEFINE_float(
-    'select_threshold', 0.5, 'Class-specific confidence score threshold for selecting a box.')
+    'select_threshold', 0.2, 'Class-specific confidence score threshold for selecting a box.')
 tf.app.flags.DEFINE_float(
     'min_size', 0.03, 'The min size of bboxes to keep.')
 tf.app.flags.DEFINE_float(
@@ -162,11 +162,9 @@ def main(_):
                                                     layer_steps = [8, 16, 32, 64, 100, 300])
         all_anchors, all_num_anchors_depth, all_num_anchors_spatial = anchor_creator.get_all_anchors()
 
-
-
         anchor_encoder_decoder = anchor_manipulator.AnchorEncoder(allowed_borders = [1.0] * 6,
-                                                            positive_threshold = 0.5,
-                                                            ignore_threshold = 0.4,
+                                                            positive_threshold = None,
+                                                            ignore_threshold = None,
                                                             prior_scaling=[0.1, 0.1, 0.2, 0.2])
 
         decode_fn = lambda pred : anchor_encoder_decoder.ext_decode_all_anchors(pred, all_anchors, all_num_anchors_depth, all_num_anchors_spatial)

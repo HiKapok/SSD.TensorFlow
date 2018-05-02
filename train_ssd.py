@@ -89,7 +89,7 @@ tf.app.flags.DEFINE_float(
 tf.app.flags.DEFINE_float(
     'momentum', 0.9,
     'The momentum for the MomentumOptimizer and RMSPropOptimizer.')
-tf.app.flags.DEFINE_float('learning_rate', 1e-4, 'Initial learning rate.')
+tf.app.flags.DEFINE_float('learning_rate', 1e-3, 'Initial learning rate.')
 tf.app.flags.DEFINE_float(
     'end_learning_rate', 0.000001,
     'The minimal end learning rate used by a polynomial decay learning rate.')
@@ -172,8 +172,8 @@ def input_pipeline(dataset_pattern='train-*', is_training=True, batch_size=FLAGS
             num_anchors_per_layer.append(all_num_anchors_depth[ind] * all_num_anchors_spatial[ind])
 
         anchor_encoder_decoder = anchor_manipulator.AnchorEncoder(allowed_borders = [1.0] * 6,
-                                                            positive_threshold = 0.5,
-                                                            ignore_threshold = 0.4,
+                                                            positive_threshold = FLAGS.match_threshold,
+                                                            ignore_threshold = FLAGS.neg_threshold,
                                                             prior_scaling=[0.1, 0.1, 0.2, 0.2])
 
         image_preprocessing_fn = lambda image_, labels_, bboxes_ : ssd_preprocessing.preprocess_image(image_, labels_, bboxes_, out_shape, is_training=is_training, data_format=FLAGS.data_format)
@@ -235,6 +235,7 @@ def ssd_model_fn(features, labels, mode, params):
         feature_layers = backbone.forward(features, training=(mode == tf.estimator.ModeKeys.TRAIN))
         #print(feature_layers)
         location_pred, cls_pred = ssd_net.multibox_head(feature_layers, params['num_classes'], all_num_anchors_depth, data_format=params['data_format'])
+
         if params['data_format'] == 'channels_first':
             cls_pred = [tf.transpose(pred, [0, 2, 3, 1]) for pred in cls_pred]
             location_pred = [tf.transpose(pred, [0, 2, 3, 1]) for pred in location_pred]
@@ -284,6 +285,7 @@ def ssd_model_fn(features, labels, mode, params):
     cls_pred = tf.boolean_mask(cls_pred, tf.stop_gradient(final_mask))
     location_pred = tf.boolean_mask(location_pred, tf.stop_gradient(positive_mask))
     loc_targets = tf.boolean_mask(loc_targets, tf.stop_gradient(positive_mask))
+
     predictions = {
         'classes': tf.argmax(cls_pred, axis=-1),
         'probabilities': tf.reduce_max(tf.nn.softmax(cls_pred, name='softmax_tensor'), axis=-1),
@@ -293,7 +295,7 @@ def ssd_model_fn(features, labels, mode, params):
         return tf.estimator.EstimatorSpec(mode=mode, predictions=predictions)
 
     # Calculate loss, which includes softmax cross entropy and L2 regularization.
-    cross_entropy = (params['negative_ratio'] + 1.) * tf.cond(n_positives > 0, lambda: tf.losses.sparse_softmax_cross_entropy(labels=glabels, logits=cls_pred), lambda: 0.)
+    cross_entropy = tf.cond(n_positives > 0, lambda: tf.losses.sparse_softmax_cross_entropy(labels=glabels, logits=cls_pred), lambda: 0.)# * (params['negative_ratio'] + 1.)
     # Create a tensor named cross_entropy for logging purposes.
     tf.identity(cross_entropy, name='cross_entropy_loss')
     tf.summary.scalar('cross_entropy_loss', cross_entropy)
@@ -338,12 +340,12 @@ def ssd_model_fn(features, labels, mode, params):
     tf.summary.scalar('cls_accuracy', cls_accuracy[1])
 
     return tf.estimator.EstimatorSpec(
-          mode=mode,
-          predictions=predictions,
-          loss=total_loss,
-          train_op=train_op,
-          eval_metric_ops=metrics,
-          scaffold=tf.train.Scaffold(init_fn=get_init_fn()))
+                              mode=mode,
+                              predictions=predictions,
+                              loss=total_loss,
+                              train_op=train_op,
+                              eval_metric_ops=metrics,
+                              scaffold=tf.train.Scaffold(init_fn=get_init_fn()))
 
 def parse_comma_list(args):
     return [float(s.strip()) for s in args.split(',')]
@@ -396,7 +398,7 @@ def main(_):
     logging_hook = tf.train.LoggingTensorHook(tensors=tensors_to_log, every_n_iter=FLAGS.log_every_n_steps,
                                             formatter=lambda dicts: (', '.join(['%s=%.6f' % (k, v) for k, v in dicts.items()])))
 
-    #hook = tf.train.ProfilerHook(save_steps=50, output_dir='.')
+    #hook = tf.train.ProfilerHook(save_steps=50, output_dir='.', show_memory=False)
     print('Starting a training cycle.')
     ssd_detector.train(input_fn=input_pipeline(dataset_pattern='train-*', is_training=True, batch_size=FLAGS.batch_size),
                     hooks=[logging_hook], max_steps=FLAGS.max_number_of_steps)

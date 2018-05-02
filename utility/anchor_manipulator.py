@@ -191,7 +191,7 @@ class AnchorEncoder(object):
         with tf.name_scope('decode_all_anchors', [pred_location]):
             anchor_cy, anchor_cx, anchor_h, anchor_w = self._all_anchors
 
-            pred_h = tf.exp(pred_location[:,-2] * self._prior_scaling[2]) * anchor_h
+            pred_h = tf.exp(pred_location[:, -2] * self._prior_scaling[2]) * anchor_h
             pred_w = tf.exp(pred_location[:, -1] * self._prior_scaling[3]) * anchor_w
             pred_cy = pred_location[:, 0] * self._prior_scaling[0] * anchor_h + anchor_cy
             pred_cx = pred_location[:, 1] * self._prior_scaling[1] * anchor_w + anchor_cx
