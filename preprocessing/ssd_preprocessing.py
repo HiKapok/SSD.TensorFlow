@@ -287,7 +287,7 @@ def ssd_random_sample_patch(image, labels, bboxes, ratio_list=[0.1, 0.3, 0.5, 0.
 
     return tf.cond(tf.less(sampled_min_iou, 1.), lambda: sample_patch(image, labels, bboxes, sampled_min_iou), lambda: (image, labels, bboxes))
 
-def ssd_random_expand(image, bboxes, ratio=2, name=None):
+def ssd_random_expand(image, bboxes, ratio=2., name=None):
   with tf.name_scope('ssd_random_expand'):
     image = tf.convert_to_tensor(image, name='image')
     if image.get_shape().ndims != 3:
@@ -295,9 +295,11 @@ def ssd_random_expand(image, bboxes, ratio=2, name=None):
 
     height, width, depth = _ImageDimensions(image, rank=3)
 
-    canvas_width, canvas_height = width * ratio, height * ratio
+    float_height, float_width = tf.to_float(height), tf.to_float(width)
 
-    mean_color_of_image = tf.reduce_mean(tf.reshape(image, [-1, 3]), 0)
+    canvas_width, canvas_height = tf.to_int32(float_width * ratio), tf.to_int32(float_height * ratio)
+
+    mean_color_of_image = [_R_MEAN/255., _G_MEAN/255., _B_MEAN/255.]#tf.reduce_mean(tf.reshape(image, [-1, 3]), 0)
 
     x = tf.random_uniform([1], minval=0, maxval=canvas_width - width, dtype=tf.int32)[0]
     y = tf.random_uniform([1], minval=0, maxval=canvas_height - height, dtype=tf.int32)[0]
@@ -326,11 +328,11 @@ def ssd_random_sample_patch_wrapper(image, labels, bboxes):
       return tf.logical_or(tf.logical_and(tf.reduce_sum(tf.cast(check_bboxes(bboxes), tf.int64)) < 1, tf.less(index, max_attempt)), tf.less(index, 1))
 
     def body(index, image, labels, bboxes):
-      image, bboxes = tf.cond(tf.random_uniform([1], minval=0., maxval=1., dtype=tf.float32)[0] < 0.25,
+      image, bboxes = tf.cond(tf.random_uniform([1], minval=0., maxval=1., dtype=tf.float32)[0] < 0.5,
                       lambda: (image, bboxes),
-                      lambda: ssd_random_expand(image, bboxes, tf.random_uniform([1], minval=2, maxval=4, dtype=tf.int32)[0]))
+                      lambda: ssd_random_expand(image, bboxes, tf.random_uniform([1], minval=1.1, maxval=4., dtype=tf.float32)[0]))
       # Distort image and bounding boxes.
-      random_sample_image, labels, bboxes = ssd_random_sample_patch(image, labels, bboxes, ratio_list=[0.1, 0.3, 0.5, 0.7, 0.9, 1.])
+      random_sample_image, labels, bboxes = ssd_random_sample_patch(image, labels, bboxes, ratio_list=[-0.1, 0.1, 0.3, 0.7, 0.9, 1.])
       random_sample_image.set_shape([None, None, 3])
       return index+1, random_sample_image, labels, bboxes
 
@@ -394,7 +396,7 @@ def random_flip_left_right(image, bboxes):
     bboxes = tf.cond(mirror_cond, lambda: mirror_bboxes, lambda: bboxes)
     return result, bboxes
 
-def preprocess_for_train(image, labels, bboxes, out_shape, data_format='channels_first', scope='ssd_preprocessing_train'):
+def preprocess_for_train(image, labels, bboxes, out_shape, data_format='channels_first', scope='ssd_preprocessing_train', output_rgb=True):
   """Preprocesses the given image for training.
 
   Args:
@@ -438,12 +440,14 @@ def preprocess_for_train(image, labels, bboxes, out_shape, data_format='channels
     distort_image = _mean_image_subtraction(distort_image, [_R_MEAN, _G_MEAN, _B_MEAN])
 
     distort_image.set_shape(out_shape + [3])
-    # Image data format.
+    if not output_rgb:
+      image_channels = tf.unstack(distort_image, axis=-1, name='split_rgb')
+      distort_image = tf.stack([image_channels[2], image_channels[1], image_channels[0]], axis=-1, name='merge_bgr')
     if data_format == 'channels_first':
       distort_image = tf.transpose(distort_image, perm=(2, 0, 1))
     return distort_image, labels, bboxes
 
-def preprocess_for_eval(image, out_shape, data_format='channels_first', scope='ssd_preprocessing_eval'):
+def preprocess_for_eval(image, out_shape, data_format='channels_first', scope='ssd_preprocessing_eval', output_rgb=True):
   """Preprocesses the given image for evaluation.
 
   Args:
@@ -459,12 +463,15 @@ def preprocess_for_eval(image, out_shape, data_format='channels_first', scope='s
     image.set_shape(out_shape + [3])
 
     image = _mean_image_subtraction(image, [_R_MEAN, _G_MEAN, _B_MEAN])
+    if not output_rgb:
+      image_channels = tf.unstack(image, axis=-1, name='split_rgb')
+      image = tf.stack([image_channels[2], image_channels[1], image_channels[0]], axis=-1, name='merge_bgr')
     # Image data format.
     if data_format == 'channels_first':
       image = tf.transpose(image, perm=(2, 0, 1))
     return image
 
-def preprocess_image(image, labels, bboxes, out_shape, is_training=False, data_format='channels_first'):
+def preprocess_image(image, labels, bboxes, out_shape, is_training=False, data_format='channels_first', output_rgb=True):
   """Preprocesses the given image.
 
   Args:
@@ -479,6 +486,6 @@ def preprocess_image(image, labels, bboxes, out_shape, is_training=False, data_f
     A preprocessed image.
   """
   if is_training:
-    return preprocess_for_train(image, labels, bboxes, out_shape, data_format=data_format)
+    return preprocess_for_train(image, labels, bboxes, out_shape, data_format=data_format, output_rgb=output_rgb)
   else:
-    return preprocess_for_eval(image, out_shape, data_format=data_format)
+    return preprocess_for_eval(image, out_shape, data_format=data_format, output_rgb=output_rgb)

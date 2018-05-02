@@ -89,7 +89,7 @@ def slim_get_split(file_pattern='{}_????'):
                                                                          'object/label',
                                                                          'object/bbox',
                                                                          'object/difficult'])
-    image, glabels, gbboxes = ssd_preprocessing.preprocess_image(org_image, glabels_raw, gbboxes_raw, [300, 300], is_training=True, data_format='channels_first')
+    image, glabels, gbboxes = ssd_preprocessing.preprocess_image(org_image, glabels_raw, gbboxes_raw, [300, 300], is_training=True, data_format='channels_last', output_rgb=True)
 
     anchor_creator = anchor_manipulator.AnchorCreator([300] * 2,
                                                     layers_shapes = [(38, 38), (19, 19), (10, 10), (5, 5), (3, 3), (1, 1)],
@@ -117,17 +117,16 @@ def slim_get_split(file_pattern='{}_????'):
                                                 tf.split(gt_scores, num_anchors_per_layer, axis=0),\
                                                 [tf.split(anchor, num_anchors_per_layer, axis=0) for anchor in anchors]
 
-    image = tf.transpose(image, perm=(1, 2, 0))
     save_image_op = tf.py_func(save_image_with_bbox,
                             [ssd_preprocessing.unwhiten_image(image),
-                            tf.clip_by_value(gt_labels[5], 0, tf.int64.max),
-                            gt_scores[5],
-                            gt_targets[5]],
+                            tf.clip_by_value(tf.concat(gt_labels, axis=0), 0, tf.int64.max),
+                            tf.concat(gt_scores, axis=0),
+                            tf.concat(gt_targets, axis=0)],
                             tf.int64, stateful=True)
     return save_image_op
 
 if __name__ == '__main__':
-    save_image_op = slim_get_split('/media/rs/7A0EE8880EE83EAF/Detections/SSD/dataset/tfrecords/*')
+    save_image_op = slim_get_split('/media/rs/7A0EE8880EE83EAF/Detections/SSD/dataset/tfrecords/train*')
     # Create the graph, etc.
     init_op = tf.group([tf.local_variables_initializer(), tf.local_variables_initializer(), tf.tables_initializer()])
 

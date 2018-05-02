@@ -109,13 +109,7 @@ class VGG16Backbone(object):
             self._conv11_block = self.ssd_conv_block(128, 1, 'conv11', padding='valid')
 
     def forward(self, inputs, training=False):
-        # convert from RGB to BGR
-        if self._data_format == 'channels_last':
-            image_channels = tf.unstack(inputs, axis=-1, name='split_rgb')
-            inputs = tf.stack([image_channels[2], image_channels[1], image_channels[0]], axis=-1, name='merge_bgr')
-        else:
-            image_channels = tf.unstack(inputs, axis=1, name='split_rgb')
-            inputs = tf.stack([image_channels[2], image_channels[1], image_channels[0]], axis=1, name='merge_bgr')
+        # inputs should in BGR
         feature_layers = []
         # forward vgg layers
         for conv in self._conv1_block:

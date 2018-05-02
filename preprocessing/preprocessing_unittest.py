@@ -90,7 +90,7 @@ def slim_get_split(file_pattern='{}_????'):
                                                                          'object/label',
                                                                          'object/bbox',
                                                                          'object/difficult'])
-    image, glabels, gbboxes = ssd_preprocessing.preprocess_image(org_image, glabels_raw, gbboxes_raw, [300, 300], is_training=True, data_format='channels_first')
+    image, glabels, gbboxes = ssd_preprocessing.preprocess_image(org_image, glabels_raw, gbboxes_raw, [300, 300], is_training=True, data_format='channels_first', output_rgb=True)
 
     image = tf.transpose(image, perm=(1, 2, 0))
     save_image_op = tf.py_func(save_image_with_bbox,

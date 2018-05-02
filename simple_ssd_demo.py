@@ -151,7 +151,7 @@ def main(_):
         image_input = tf.placeholder(tf.uint8, shape=(None, None, 3))
         shape_input = tf.placeholder(tf.int32, shape=(2,))
 
-        features = ssd_preprocessing.preprocess_for_eval(image_input, out_shape, data_format=FLAGS.data_format)
+        features = ssd_preprocessing.preprocess_for_eval(image_input, out_shape, data_format=FLAGS.data_format, output_rgb=False)
         features = tf.expand_dims(features, axis=0)
 
         anchor_creator = anchor_manipulator.AnchorCreator(out_shape,
