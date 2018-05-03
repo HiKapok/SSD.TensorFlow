@@ -78,8 +78,8 @@ def select_bboxes(scores_pred, bboxes_pred, num_classes, select_threshold):
     with tf.name_scope('select_bboxes', [scores_pred, bboxes_pred]):
         for class_ind in range(1, num_classes):
             class_scores = scores_pred[:, class_ind]
-            select_mask = class_scores > select_threshold
 
+            select_mask = class_scores > select_threshold
             select_mask = tf.cast(select_mask, tf.float32)
             selected_bboxes[class_ind] = tf.multiply(bboxes_pred, tf.expand_dims(select_mask, axis=-1))
             selected_scores[class_ind] = tf.multiply(class_scores, select_mask)
@@ -132,8 +132,8 @@ def parse_by_class(cls_pred, bboxes_pred, num_classes, select_threshold, min_siz
         scores_pred = tf.nn.softmax(cls_pred)
         selected_bboxes, selected_scores = select_bboxes(scores_pred, bboxes_pred, num_classes, select_threshold)
         for class_ind in range(1, num_classes):
-            ymin, xmin, ymax, xmax = tf.split(selected_bboxes[class_ind], 4, axis=-1)
-            ymin, xmin, ymax, xmax = tf.squeeze(ymin), tf.squeeze(xmin), tf.squeeze(ymax), tf.squeeze(xmax)
+            ymin, xmin, ymax, xmax = tf.unstack(selected_bboxes[class_ind], 4, axis=-1)
+            #ymin, xmin, ymax, xmax = tf.squeeze(ymin), tf.squeeze(xmin), tf.squeeze(ymax), tf.squeeze(xmax)
             ymin, xmin, ymax, xmax = clip_bboxes(ymin, xmin, ymax, xmax, 'clip_bboxes_{}'.format(class_ind))
             ymin, xmin, ymax, xmax, selected_scores[class_ind] = filter_bboxes(selected_scores[class_ind],
                                                 ymin, xmin, ymax, xmax, min_size, 'filter_bboxes_{}'.format(class_ind))

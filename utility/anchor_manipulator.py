@@ -159,10 +159,8 @@ class AnchorEncoder(object):
             # set those ignored positions to -1
             gt_labels = gt_labels + (-1 * tf.cast(matched_gt < -1, tf.int64))
 
-            #print(tf.gather(bboxes, matched_indices))
-            gt_ymin, gt_xmin, gt_ymax, gt_xmax = tf.split(tf.gather(bboxes, matched_indices), 4, axis=-1)
-            gt_ymin, gt_xmin, gt_ymax, gt_xmax = tf.squeeze(gt_ymin), tf.squeeze(gt_xmin), tf.squeeze(gt_ymax), tf.squeeze(gt_xmax)
-            #print(anchors_ymin, anchors_xmin, anchors_ymax, anchors_xmax)
+            gt_ymin, gt_xmin, gt_ymax, gt_xmax = tf.unstack(tf.gather(bboxes, matched_indices), 4, axis=-1)
+
             # transform to center / size.
             gt_cy, gt_cx, gt_h, gt_w = self.point2center(gt_ymin, gt_xmin, gt_ymax, gt_xmax)
             anchor_cy, anchor_cx, anchor_h, anchor_w = self.point2center(anchors_ymin, anchors_xmin, anchors_ymax, anchors_xmax)
@@ -179,7 +177,6 @@ class AnchorEncoder(object):
                 gt_targets = tf.stack([gt_cy, gt_cx, gt_h, gt_w], axis=-1)
             # set all targets of non-positive positions to 0
             gt_targets = tf.expand_dims(tf.cast(matched_gt_mask, tf.float32), -1) * gt_targets
-            #print(gt_targets, gt_labels, gt_scores)
             self._all_anchors = (anchor_cy, anchor_cx, anchor_h, anchor_w)
             return gt_targets, gt_labels, gt_scores
 

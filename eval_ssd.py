@@ -243,8 +243,9 @@ def parse_by_class(cls_pred, bboxes_pred, num_classes, select_threshold, min_siz
         scores_pred = tf.nn.softmax(cls_pred)
         selected_bboxes, selected_scores = select_bboxes(scores_pred, bboxes_pred, num_classes, select_threshold)
         for class_ind in range(1, num_classes):
-            ymin, xmin, ymax, xmax = tf.split(selected_bboxes[class_ind], 4, axis=-1)
-            ymin, xmin, ymax, xmax = tf.squeeze(ymin), tf.squeeze(xmin), tf.squeeze(ymax), tf.squeeze(xmax)
+            ymin, xmin, ymax, xmax = tf.unstack(selected_bboxes[class_ind], 4, axis=-1)
+            #ymin, xmin, ymax, xmax = tf.split(selected_bboxes[class_ind], 4, axis=-1)
+            #ymin, xmin, ymax, xmax = tf.squeeze(ymin), tf.squeeze(xmin), tf.squeeze(ymax), tf.squeeze(xmax)
             ymin, xmin, ymax, xmax = clip_bboxes(ymin, xmin, ymax, xmax, 'clip_bboxes_{}'.format(class_ind))
             ymin, xmin, ymax, xmax, selected_scores[class_ind] = filter_bboxes(selected_scores[class_ind],
                                                 ymin, xmin, ymax, xmax, min_size, 'filter_bboxes_{}'.format(class_ind))
@@ -287,7 +288,7 @@ def ssd_model_fn(features, labels, mode, params):
     with tf.device('/cpu:0'):
         bboxes_pred = decode_fn(location_pred)
         bboxes_pred = tf.concat(bboxes_pred, axis=0)
-        selected_bboxes, selected_scores = parse_by_class(cls_pred, bboxes_pred,
+        selected_bboxes, selected_scores = parse_by_class(cls_pred, location_pred,
                                                         params['num_classes'], params['select_threshold'], params['min_size'],
                                                         params['keep_topk'], params['nms_topk'], params['nms_threshold'])
 
@@ -296,47 +297,51 @@ def ssd_model_fn(features, labels, mode, params):
         predictions['scores_{}'.format(class_ind)] = tf.expand_dims(selected_scores[class_ind], axis=0)
         predictions['bboxes_{}'.format(class_ind)] = tf.expand_dims(selected_bboxes[class_ind], axis=0)
 
-    cls_targets = tf.reshape(cls_targets, [-1])
-    match_scores = tf.reshape(match_scores, [-1])
-    loc_targets = tf.reshape(loc_targets, [-1, 4])
+    flaten_cls_targets = tf.reshape(cls_targets, [-1])
+    flaten_match_scores = tf.reshape(match_scores, [-1])
+    flaten_loc_targets = tf.reshape(loc_targets, [-1, 4])
 
     # each positive examples has one label
-    positive_mask = cls_targets > 0
+    positive_mask = flaten_cls_targets > 0
     n_positives = tf.count_nonzero(positive_mask)
 
-    negtive_mask = tf.logical_and(tf.equal(cls_targets, 0), match_scores > 0.)
-    n_negtives = tf.count_nonzero(negtive_mask)
+    batch_n_positives = tf.count_nonzero(cls_targets, -1)
 
-    n_neg_to_select = tf.cast(params['negative_ratio'] * tf.cast(n_positives, tf.float32), tf.int32)
-    n_neg_to_select = tf.minimum(n_neg_to_select, tf.cast(n_negtives, tf.int32))
+    batch_negtive_mask = tf.logical_and(tf.equal(cls_targets, 0), match_scores > 0.)
+    batch_n_negtives = tf.count_nonzero(batch_negtive_mask, -1)
+
+    batch_n_neg_select = tf.cast(params['negative_ratio'] * tf.cast(batch_n_positives, tf.float32), tf.int32)
+    batch_n_neg_select = tf.minimum(batch_n_neg_select, tf.cast(batch_n_negtives, tf.int32))
 
     # hard negative mining for classification
-    predictions_for_bg = tf.nn.softmax(cls_pred)[:, 0]
-    prob_for_negtives = tf.where(negtive_mask,
+    predictions_for_bg = tf.nn.softmax(tf.reshape(cls_pred, [tf.shape(features)[0], -1, params['num_classes']]))[:, :, 0]
+    prob_for_negtives = tf.where(batch_negtive_mask,
                            0. - predictions_for_bg,
                            # ignore all the positives
                            0. - tf.ones_like(predictions_for_bg))
-    topk_prob_for_bg, _ = tf.nn.top_k(prob_for_negtives, k=n_neg_to_select)
-    selected_neg_mask = prob_for_negtives > topk_prob_for_bg[-1]
+    topk_prob_for_bg, _ = tf.nn.top_k(prob_for_negtives, k=tf.shape(prob_for_negtives)[1])
+    score_at_k = tf.gather_nd(topk_prob_for_bg, tf.stack([tf.range(tf.shape(features)[0]), batch_n_neg_select - 1], axis=-1))
+
+    selected_neg_mask = prob_for_negtives >= tf.expand_dims(score_at_k, axis=-1)
 
     # include both selected negtive and all positive examples
-    final_mask = tf.stop_gradient(tf.logical_or(tf.logical_and(negtive_mask, selected_neg_mask), positive_mask))
+    final_mask = tf.stop_gradient(tf.logical_or(tf.reshape(tf.logical_and(batch_negtive_mask, selected_neg_mask), [-1]), positive_mask))
     total_examples = tf.count_nonzero(final_mask)
 
-    glabels = tf.boolean_mask(tf.clip_by_value(cls_targets, 0, FLAGS.num_classes), tf.stop_gradient(final_mask))
-    cls_pred = tf.boolean_mask(cls_pred, tf.stop_gradient(final_mask))
+    cls_pred = tf.boolean_mask(cls_pred, final_mask)
     location_pred = tf.boolean_mask(location_pred, tf.stop_gradient(positive_mask))
-    loc_targets = tf.boolean_mask(loc_targets, tf.stop_gradient(positive_mask))
+    flaten_cls_targets = tf.boolean_mask(tf.clip_by_value(flaten_cls_targets, 0, FLAGS.num_classes), final_mask)
+    flaten_loc_targets = tf.stop_gradient(tf.boolean_mask(flaten_loc_targets, positive_mask))
 
     # Calculate loss, which includes softmax cross entropy and L2 regularization.
     #cross_entropy = (params['negative_ratio'] + 1.) * tf.cond(n_positives > 0, lambda: tf.losses.sparse_softmax_cross_entropy(labels=glabels, logits=cls_pred), lambda: 0.)
-    cross_entropy = tf.losses.sparse_softmax_cross_entropy(labels=glabels, logits=cls_pred)
+    cross_entropy = tf.losses.sparse_softmax_cross_entropy(labels=flaten_cls_targets, logits=cls_pred)
     # Create a tensor named cross_entropy for logging purposes.
     tf.identity(cross_entropy, name='cross_entropy_loss')
     tf.summary.scalar('cross_entropy_loss', cross_entropy)
 
-    #loc_loss = tf.cond(n_positives > 0, lambda: modified_smooth_l1(location_pred, tf.stop_gradient(loc_targets), sigma=1.), lambda: tf.zeros_like(location_pred))
-    loc_loss = modified_smooth_l1(location_pred, tf.stop_gradient(loc_targets), sigma=1.)
+    #loc_loss = tf.cond(n_positives > 0, lambda: modified_smooth_l1(location_pred, tf.stop_gradient(flaten_loc_targets), sigma=1.), lambda: tf.zeros_like(location_pred))
+    loc_loss = modified_smooth_l1(location_pred, flaten_loc_targets, sigma=1.)
     loc_loss = tf.reduce_mean(tf.reduce_sum(loc_loss, axis=-1), name='location_loss')
     tf.summary.scalar('location_loss', loc_loss)
     tf.losses.add_loss(loc_loss)
@@ -345,7 +350,7 @@ def ssd_model_fn(features, labels, mode, params):
     # doing so leads to a small improvement in accuracy.
     total_loss = tf.add(cross_entropy, loc_loss, name='total_loss')
 
-    cls_accuracy = tf.metrics.accuracy(glabels, tf.argmax(cls_pred, axis=-1))
+    cls_accuracy = tf.metrics.accuracy(flaten_cls_targets, tf.argmax(cls_pred, axis=-1))
 
     # Create a tensor named train_accuracy for logging purposes.
     tf.identity(cls_accuracy[1], name='cls_accuracy')
