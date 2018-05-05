@@ -84,6 +84,8 @@ tf.app.flags.DEFINE_float(
 tf.app.flags.DEFINE_float(
     'neg_threshold', 0.5, 'Matching threshold for the negtive examples in the loss function.')
 # optimizer related configuration
+tf.app.flags.DEFINE_integer(
+    'tf_random_seed', 20180503, 'Random seed for TensorFlow initializers.')
 tf.app.flags.DEFINE_float(
     'weight_decay', 5e-4, 'The weight decay on the model weights.')
 tf.app.flags.DEFINE_float(
@@ -218,6 +220,22 @@ def modified_smooth_l1(bbox_pred, bbox_targets, bbox_inside_weights=1., bbox_out
 
         return outside_mul
 
+
+# from scipy.misc import imread, imsave, imshow, imresize
+# import numpy as np
+# from utility import draw_toolbox
+
+# def save_image_with_bbox(image, labels_, scores_, bboxes_):
+#     if not hasattr(save_image_with_bbox, "counter"):
+#         save_image_with_bbox.counter = 0  # it doesn't exist yet, so initialize it
+#     save_image_with_bbox.counter += 1
+
+#     img_to_draw = np.copy(image)
+
+#     img_to_draw = draw_toolbox.bboxes_draw_on_img(img_to_draw, labels_, scores_, bboxes_, thickness=2)
+#     imsave(os.path.join('./debug/{}.jpg').format(save_image_with_bbox.counter), img_to_draw)
+#     return save_image_with_bbox.counter
+
 def ssd_model_fn(features, labels, mode, params):
     """model_fn for SSD to be used with our Estimator."""
     shape = labels['shape']
@@ -230,6 +248,18 @@ def ssd_model_fn(features, labels, mode, params):
     num_anchors_per_layer = global_anchor_info['num_anchors_per_layer']
     all_num_anchors_depth = global_anchor_info['all_num_anchors_depth']
 
+    # bboxes_pred = decode_fn(loc_targets[0])
+    # bboxes_pred = [tf.reshape(preds, [-1, 4]) for preds in bboxes_pred]
+    # bboxes_pred = tf.concat(bboxes_pred, axis=0)
+    # save_image_op = tf.py_func(save_image_with_bbox,
+    #                         [ssd_preprocessing.unwhiten_image(features[0]),
+    #                         tf.clip_by_value(cls_targets[0], 0, tf.int64.max),
+    #                         match_scores[0],
+    #                         bboxes_pred],
+    #                         tf.int64, stateful=True)
+    # with tf.control_dependencies([save_image_op]):
+
+    #print(all_num_anchors_depth)
     with tf.variable_scope(params['model_scope'], default_name=None, values=[features], reuse=tf.AUTO_REUSE):
         backbone = ssd_net.VGG16Backbone(params['data_format'])
         feature_layers = backbone.forward(features, training=(mode == tf.estimator.ModeKeys.TRAIN))
@@ -240,11 +270,14 @@ def ssd_model_fn(features, labels, mode, params):
             cls_pred = [tf.transpose(pred, [0, 2, 3, 1]) for pred in cls_pred]
             location_pred = [tf.transpose(pred, [0, 2, 3, 1]) for pred in location_pred]
 
-        cls_pred = [tf.reshape(pred, [-1, params['num_classes']]) for pred in cls_pred]
-        location_pred = [tf.reshape(pred, [-1, 4]) for pred in location_pred]
+        cls_pred = [tf.reshape(pred, [tf.shape(features)[0], -1, params['num_classes']]) for pred in cls_pred]
+        location_pred = [tf.reshape(pred, [tf.shape(features)[0], -1, 4]) for pred in location_pred]
 
-        cls_pred = tf.concat(cls_pred, axis=0)
-        location_pred = tf.concat(location_pred, axis=0)
+        cls_pred = tf.concat(cls_pred, axis=1)
+        location_pred = tf.concat(location_pred, axis=1)
+
+        cls_pred = tf.reshape(cls_pred, [-1, params['num_classes']])
+        location_pred = tf.reshape(location_pred, [-1, 4])
 
     with tf.device('/cpu:0'):
         with tf.control_dependencies([cls_pred, location_pred]):
@@ -267,7 +300,7 @@ def ssd_model_fn(features, labels, mode, params):
 
                 batch_n_positives = tf.count_nonzero(cls_targets, -1)
 
-                batch_negtive_mask = tf.logical_and(tf.equal(cls_targets, 0), match_scores > 0.)
+                batch_negtive_mask = tf.equal(cls_targets, 0)#tf.logical_and(tf.equal(cls_targets, 0), match_scores > 0.)
                 batch_n_negtives = tf.count_nonzero(batch_negtive_mask, -1)
 
                 batch_n_neg_select = tf.cast(params['negative_ratio'] * tf.cast(batch_n_positives, tf.float32), tf.int32)
@@ -290,7 +323,7 @@ def ssd_model_fn(features, labels, mode, params):
 
                 cls_pred = tf.boolean_mask(cls_pred, final_mask)
                 location_pred = tf.boolean_mask(location_pred, tf.stop_gradient(positive_mask))
-                flaten_cls_targets = tf.boolean_mask(tf.clip_by_value(flaten_cls_targets, 0, FLAGS.num_classes), final_mask)
+                flaten_cls_targets = tf.boolean_mask(tf.clip_by_value(flaten_cls_targets, 0, params['num_classes']), final_mask)
                 flaten_loc_targets = tf.stop_gradient(tf.boolean_mask(flaten_loc_targets, positive_mask))
 
                 predictions = {
@@ -311,7 +344,7 @@ def ssd_model_fn(features, labels, mode, params):
     # Calculate loss, which includes softmax cross entropy and L2 regularization.
     #cross_entropy = tf.cond(n_positives > 0, lambda: tf.losses.sparse_softmax_cross_entropy(labels=flaten_cls_targets, logits=cls_pred), lambda: 0.)# * (params['negative_ratio'] + 1.)
     #flaten_cls_targets=tf.Print(flaten_cls_targets, [flaten_loc_targets],summarize=50000)
-    cross_entropy = tf.losses.sparse_softmax_cross_entropy(labels=flaten_cls_targets, logits=cls_pred)# * (params['negative_ratio'] + 1.)
+    cross_entropy = tf.losses.sparse_softmax_cross_entropy(labels=flaten_cls_targets, logits=cls_pred) * (params['negative_ratio'] + 1.)
     # Create a tensor named cross_entropy for logging purposes.
     tf.identity(cross_entropy, name='cross_entropy_loss')
     tf.summary.scalar('cross_entropy_loss', cross_entropy)
@@ -323,9 +356,16 @@ def ssd_model_fn(features, labels, mode, params):
     tf.summary.scalar('location_loss', loc_loss)
     tf.losses.add_loss(loc_loss)
 
+    l2_loss_vars = []
+    for trainable_var in tf.trainable_variables():
+        if '_bn' not in trainable_var.name:
+            if 'conv4_3_scale' not in trainable_var.name:
+                l2_loss_vars.append(tf.nn.l2_loss(trainable_var))
+            else:
+                l2_loss_vars.append(tf.nn.l2_loss(trainable_var) * 0.1)
     # Add weight decay to the loss. We exclude the batch norm variables because
     # doing so leads to a small improvement in accuracy.
-    total_loss = tf.add(cross_entropy + loc_loss, tf.multiply(params['weight_decay'], tf.add_n([tf.nn.l2_loss(v) for v in tf.trainable_variables() if (('_bn' not in v.name) and ('conv4_3_scale' not in v.name))]), name='l2_loss'), name='total_loss')
+    total_loss = tf.add(cross_entropy + loc_loss, tf.multiply(params['weight_decay'], tf.add_n(l2_loss_vars), name='l2_loss'), name='total_loss')
 
     if mode == tf.estimator.ModeKeys.TRAIN:
         global_step = tf.train.get_or_create_global_step()
@@ -375,6 +415,7 @@ def main(_):
                                         save_checkpoints_steps=None).replace(
                                         save_summary_steps=FLAGS.save_summary_steps).replace(
                                         keep_checkpoint_max=5).replace(
+                                        tf_random_seed=FLAGS.tf_random_seed).replace(
                                         log_step_count_steps=FLAGS.log_every_n_steps).replace(
                                         session_config=config)
 

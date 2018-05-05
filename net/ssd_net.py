@@ -108,6 +108,13 @@ class VGG16Backbone(object):
             self._conv10_block = self.ssd_conv_block(128, 1, 'conv10', padding='valid')
             self._conv11_block = self.ssd_conv_block(128, 1, 'conv11', padding='valid')
 
+    def l2_normalize(self, x, name):
+        with tf.name_scope(name, "l2_normalize", [x]) as name:
+            axis = -1 if self._data_format == 'channels_last' else 1
+            square_sum = tf.reduce_sum(tf.square(x), axis, keepdims=True)
+            x_inv_norm = tf.rsqrt(tf.maximum(square_sum, 1e-10))
+            return tf.multiply(x, x_inv_norm, name=name)
+
     def forward(self, inputs, training=False):
         # inputs should in BGR
         feature_layers = []
@@ -131,8 +138,7 @@ class VGG16Backbone(object):
             else:
                 weight_scale = tf.reshape(weight_scale, [1, -1, 1, 1], name='reshape')
 
-            feature_layers.append(tf.multiply(weight_scale, tf.nn.l2_normalize(inputs, (-1 if self._data_format == 'channels_last' else 1),
-                                                        epsilon=1e-10, name='norm'), name='rescale')
+            feature_layers.append(tf.multiply(weight_scale, self.l2_normalize(inputs, name='norm'), name='rescale')
                                 )
         inputs = self._pool4.apply(inputs)
         for conv in self._conv5_block:
@@ -234,15 +240,15 @@ def multibox_head(feature_layers, num_classes, num_anchors_depth_per_layer, data
         loc_preds = []
         for ind, feat in enumerate(feature_layers):
             loc_preds.append(tf.layers.conv2d(feat, num_anchors_depth_per_layer[ind] * 4, (3, 3), use_bias=True,
-                    name='loc_{}'.format(ind), strides=(1, 1),
-                    padding='same', data_format=data_format, activation=None,
-                    kernel_initializer=tf.glorot_uniform_initializer(),
-                    bias_initializer=tf.zeros_initializer()))
+                        name='loc_{}'.format(ind), strides=(1, 1),
+                        padding='same', data_format=data_format, activation=None,
+                        kernel_initializer=tf.glorot_uniform_initializer(),
+                        bias_initializer=tf.zeros_initializer()))
             cls_preds.append(tf.layers.conv2d(feat, num_anchors_depth_per_layer[ind] * num_classes, (3, 3), use_bias=True,
-                    name='cls_{}'.format(ind), strides=(1, 1),
-                    padding='same', data_format=data_format, activation=None,
-                    kernel_initializer=tf.glorot_uniform_initializer(),
-                    bias_initializer=tf.zeros_initializer()))
+                        name='cls_{}'.format(ind), strides=(1, 1),
+                        padding='same', data_format=data_format, activation=None,
+                        kernel_initializer=tf.glorot_uniform_initializer(),
+                        bias_initializer=tf.zeros_initializer()))
 
         return loc_preds, cls_preds
 

@@ -201,8 +201,8 @@ def ssd_random_sample_patch(image, labels, bboxes, ratio_list=[0.1, 0.3, 0.5, 0.
       def body(index, roi, mask):
         sampled_width, sampled_height = sample_width_height(float_width, float_height)
 
-        x = tf.random_uniform([1], minval=0, maxval=width - sampled_width, dtype=tf.int32)[0]
-        y = tf.random_uniform([1], minval=0, maxval=height - sampled_height, dtype=tf.int32)[0]
+        x = tf.random_uniform([], minval=0, maxval=width - sampled_width, dtype=tf.int32)
+        y = tf.random_uniform([], minval=0, maxval=height - sampled_height, dtype=tf.int32)
 
         roi = [tf.cast(y, tf.float32) / float_height,
               tf.cast(x, tf.float32) / float_width,
@@ -301,8 +301,8 @@ def ssd_random_expand(image, bboxes, ratio=2., name=None):
 
     mean_color_of_image = [_R_MEAN/255., _G_MEAN/255., _B_MEAN/255.]#tf.reduce_mean(tf.reshape(image, [-1, 3]), 0)
 
-    x = tf.random_uniform([1], minval=0, maxval=canvas_width - width, dtype=tf.int32)[0]
-    y = tf.random_uniform([1], minval=0, maxval=canvas_height - height, dtype=tf.int32)[0]
+    x = tf.random_uniform([], minval=0, maxval=canvas_width - width, dtype=tf.int32)
+    y = tf.random_uniform([], minval=0, maxval=canvas_height - height, dtype=tf.int32)
 
     paddings = tf.convert_to_tensor([[y, canvas_height - height - y], [x, canvas_width - width - x]])
 
@@ -328,7 +328,7 @@ def ssd_random_sample_patch_wrapper(image, labels, bboxes):
       return tf.logical_or(tf.logical_and(tf.reduce_sum(tf.cast(check_bboxes(bboxes), tf.int64)) < 1, tf.less(index, max_attempt)), tf.less(index, 1))
 
     def body(index, image, labels, bboxes):
-      image, bboxes = tf.cond(tf.random_uniform([1], minval=0., maxval=1., dtype=tf.float32)[0] < 0.5,
+      image, bboxes = tf.cond(tf.random_uniform([], minval=0., maxval=1., dtype=tf.float32) < 0.5,
                       lambda: (image, bboxes),
                       lambda: ssd_random_expand(image, bboxes, tf.random_uniform([1], minval=1.1, maxval=4., dtype=tf.float32)[0]))
       # Distort image and bounding boxes.

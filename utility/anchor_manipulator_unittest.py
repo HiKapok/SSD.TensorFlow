@@ -106,10 +106,11 @@ def slim_get_split(file_pattern='{}_????'):
 
     anchor_encoder_decoder = anchor_manipulator.AnchorEncoder(allowed_borders=[1.0] * 6,
                                                         positive_threshold = 0.5,
-                                                        ignore_threshold = 0.4,
+                                                        ignore_threshold = 0.5,
                                                         prior_scaling=[0.1, 0.1, 0.2, 0.2])
 
     gt_targets, gt_labels, gt_scores = anchor_encoder_decoder.encode_all_anchors(glabels, gbboxes, all_anchors, all_num_anchors_depth, all_num_anchors_spatial, True)
+
     anchors = anchor_encoder_decoder._all_anchors
     # split by layers
     gt_targets, gt_labels, gt_scores, anchors = tf.split(gt_targets, num_anchors_per_layer, axis=0),\

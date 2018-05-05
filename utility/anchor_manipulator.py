@@ -19,17 +19,17 @@ import numpy as np
 
 from tensorflow.contrib.image.python.ops import image_ops
 
-def areas(bboxes):
-    with tf.name_scope('bboxes_areas', [bboxes]):
-        ymin, xmin, ymax, xmax = tf.split(bboxes, 4, axis=1)
+def areas(gt_bboxes):
+    with tf.name_scope('bboxes_areas', [gt_bboxes]):
+        ymin, xmin, ymax, xmax = tf.split(gt_bboxes, 4, axis=1)
         return (xmax - xmin) * (ymax - ymin)
 
-def intersection(bboxes, gt_bboxes):
-    with tf.name_scope('bboxes_intersection', [bboxes, gt_bboxes]):
+def intersection(gt_bboxes, default_bboxes):
+    with tf.name_scope('bboxes_intersection', [gt_bboxes, default_bboxes]):
         # num_anchors x 1
-        ymin, xmin, ymax, xmax = tf.split(bboxes, 4, axis=1)
+        ymin, xmin, ymax, xmax = tf.split(gt_bboxes, 4, axis=1)
         # 1 x num_anchors
-        gt_ymin, gt_xmin, gt_ymax, gt_xmax = [tf.transpose(b, perm=[1, 0]) for b in tf.split(gt_bboxes, 4, axis=1)]
+        gt_ymin, gt_xmin, gt_ymax, gt_xmax = [tf.transpose(b, perm=[1, 0]) for b in tf.split(default_bboxes, 4, axis=1)]
         # broadcast here to generate the full matrix
         int_ymin = tf.maximum(ymin, gt_ymin)
         int_xmin = tf.maximum(xmin, gt_xmin)
@@ -39,13 +39,13 @@ def intersection(bboxes, gt_bboxes):
         w = tf.maximum(int_xmax - int_xmin, 0.)
 
         return h * w
-def iou_matrix(bboxes, gt_bboxes):
-    with tf.name_scope('iou_matrix', [bboxes, gt_bboxes]):
-        inter_vol = intersection(bboxes, gt_bboxes)
+def iou_matrix(gt_bboxes, default_bboxes):
+    with tf.name_scope('iou_matrix', [gt_bboxes, default_bboxes]):
+        inter_vol = intersection(gt_bboxes, default_bboxes)
         # broadcast
-        union_vol = areas(bboxes) + tf.transpose(areas(gt_bboxes), perm=[1, 0]) - inter_vol
+        union_vol = areas(gt_bboxes) + tf.transpose(areas(default_bboxes), perm=[1, 0]) - inter_vol
 
-        return tf.where(tf.equal(inter_vol, 0.0),
+        return tf.where(tf.equal(union_vol, 0.0),
                         tf.zeros_like(inter_vol), tf.truediv(inter_vol, union_vol))
 
 def do_dual_max_match(overlap_matrix, low_thres, high_thres, ignore_between=True, gt_max_first=True):
@@ -58,7 +58,7 @@ def do_dual_max_match(overlap_matrix, low_thres, high_thres, ignore_between=True
         # the matching degree
         match_values = tf.reduce_max(overlap_matrix, axis=0)
 
-        positive_mask = tf.greater_equal(match_values, high_thres)
+        #positive_mask = tf.greater(match_values, high_thres)
         less_mask = tf.less(match_values, low_thres)
         between_mask = tf.logical_and(tf.less(match_values, high_thres), tf.greater_equal(match_values, low_thres))
         negative_mask = less_mask if ignore_between else between_mask
@@ -66,6 +66,7 @@ def do_dual_max_match(overlap_matrix, low_thres, high_thres, ignore_between=True
         # fill all negative positions with -1, all ignore positions is -2
         match_indices = tf.where(negative_mask, -1 * tf.ones_like(anchors_to_gt), anchors_to_gt)
         match_indices = tf.where(ignore_mask, -2 * tf.ones_like(match_indices), match_indices)
+
         # negtive values has no effect in tf.one_hot, that means all zeros along that axis
         # so all positive match positions in anchors_to_gt_mask is 1, all others are 0
         anchors_to_gt_mask = tf.one_hot(tf.clip_by_value(match_indices, -1, tf.cast(tf.shape(overlap_matrix)[0], tf.int64)),
@@ -83,25 +84,38 @@ def do_dual_max_match(overlap_matrix, low_thres, high_thres, ignore_between=True
                                                             tf.one_hot(gt_to_anchors, tf.shape(overlap_matrix)[1],
                                                                         on_value=True, off_value=False, axis=1, dtype=tf.bool)
                                                             ), tf.int64)
+        # can not use left_gt_to_anchors_mask here, because there are many ground truthes match to one anchor, we should pick the highest one even when we are merging matching from ground truth side
+        left_gt_to_anchors_scores = overlap_matrix * tf.to_float(left_gt_to_anchors_mask)
         # merge matching results from ground truth's side with the original matching results from anchors' side
         # then select all the overlap score of those matching pairs
         selected_scores = tf.gather_nd(overlap_matrix,  tf.stack([tf.where(tf.reduce_max(left_gt_to_anchors_mask, axis=0) > 0,
-                                                                            tf.argmax(left_gt_to_anchors_mask, axis=0),
+                                                                            tf.argmax(left_gt_to_anchors_scores, axis=0),
                                                                             anchors_to_gt),
                                                                     tf.range(tf.cast(tf.shape(overlap_matrix)[1], tf.int64))], axis=1))
         # return the matching results for both foreground anchors and background anchors, also with overlap scores
         return tf.where(tf.reduce_max(left_gt_to_anchors_mask, axis=0) > 0,
-                        tf.argmax(left_gt_to_anchors_mask, axis=0),
+                        tf.argmax(left_gt_to_anchors_scores, axis=0),
                         match_indices), selected_scores
 
+# def save_anchors(bboxes, labels, anchors_point):
+#     if not hasattr(save_image_with_bbox, "counter"):
+#         save_image_with_bbox.counter = 0  # it doesn't exist yet, so initialize it
+#     save_image_with_bbox.counter += 1
+
+#     np.save('./debug/bboxes_{}.npy'.format(save_image_with_bbox.counter), np.copy(bboxes))
+#     np.save('./debug/labels_{}.npy'.format(save_image_with_bbox.counter), np.copy(labels))
+#     np.save('./debug/anchors_{}.npy'.format(save_image_with_bbox.counter), np.copy(anchors_point))
+#     return save_image_with_bbox.counter
+
 class AnchorEncoder(object):
-    def __init__(self, allowed_borders, positive_threshold, ignore_threshold, prior_scaling):
+    def __init__(self, allowed_borders, positive_threshold, ignore_threshold, prior_scaling, clip=False):
         super(AnchorEncoder, self).__init__()
         self._all_anchors = None
         self._allowed_borders = allowed_borders
         self._positive_threshold = positive_threshold
         self._ignore_threshold = ignore_threshold
         self._prior_scaling = prior_scaling
+        self._clip = clip
 
     def center2point(self, center_y, center_x, height, width):
         return center_y - height / 2., center_x - width / 2., center_y + height / 2., center_x + width / 2.,
@@ -138,6 +152,12 @@ class AnchorEncoder(object):
             anchors_ymax = tf.concat(list_anchors_ymax, 0, name='concat_ymax')
             anchors_xmax = tf.concat(list_anchors_xmax, 0, name='concat_xmax')
 
+            if self._clip:
+                anchors_ymin = tf.clip_by_value(anchors_ymin, 0., 1.)
+                anchors_xmin = tf.clip_by_value(anchors_xmin, 0., 1.)
+                anchors_ymax = tf.clip_by_value(anchors_ymax, 0., 1.)
+                anchors_xmax = tf.clip_by_value(anchors_xmax, 0., 1.)
+
             anchor_allowed_borders = tf.stack(tiled_allowed_borders, 0, name='concat_allowed_borders')
 
             inside_mask = tf.logical_and(tf.logical_and(anchors_ymin > -anchor_allowed_borders * 1.,
@@ -147,6 +167,13 @@ class AnchorEncoder(object):
 
             anchors_point = tf.stack([anchors_ymin, anchors_xmin, anchors_ymax, anchors_xmax], axis=-1)
 
+            # save_anchors_op = tf.py_func(save_anchors,
+            #                 [bboxes,
+            #                 labels,
+            #                 anchors_point],
+            #                 tf.int64, stateful=True)
+
+            # with tf.control_dependencies([save_anchors_op]):
             overlap_matrix = iou_matrix(bboxes, anchors_point) * tf.cast(tf.expand_dims(inside_mask, 0), tf.float32)
             matched_gt, gt_scores = do_dual_max_match(overlap_matrix, self._ignore_threshold, self._positive_threshold)
             # get all positive matching positions
