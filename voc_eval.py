@@ -186,6 +186,7 @@ def voc_eval(detpath,
     # extract gt objects for this class
     class_recs = {}
     npos = 0
+
     for imagename in imagenames:
         R = [obj for obj in recs[imagename] if obj['name'] == classname]
         bbox = np.array([x['bbox'] for x in R])
@@ -195,11 +196,10 @@ def voc_eval(detpath,
         class_recs[imagename] = {'bbox': bbox,
                                  'difficult': difficult,
                                  'det': det}
-
     # read dets
-    detfile = detpath.format(classname)
-    with open(detfile, 'r') as f:
+    with open(detpath, 'r') as f:
         lines = f.readlines()
+
     if any(lines) == 1:
 
         splitlines = [x.strip().split(' ') for x in lines]

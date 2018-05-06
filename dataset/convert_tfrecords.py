@@ -29,7 +29,7 @@ import tensorflow as tf
 
 import dataset_common
 
-'''How to order your dataset:
+'''How to organize your dataset folder:
   VOCROOT/
        |->VOC2007/
        |    |->Annotations/

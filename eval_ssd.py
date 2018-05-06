@@ -291,7 +291,7 @@ def ssd_model_fn(features, labels, mode, params):
     with tf.device('/cpu:0'):
         bboxes_pred = decode_fn(location_pred)
         bboxes_pred = tf.concat(bboxes_pred, axis=0)
-        selected_bboxes, selected_scores = parse_by_class(cls_pred, location_pred,
+        selected_bboxes, selected_scores = parse_by_class(cls_pred, bboxes_pred,
                                                         params['num_classes'], params['select_threshold'], params['min_size'],
                                                         params['keep_topk'], params['nms_topk'], params['nms_threshold'])
 
