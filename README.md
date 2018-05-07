@@ -69,9 +69,9 @@ You can download the trained model(VOC07+12 Train) from [GoogleDrive](https://dr
 
 Here is the training logs and some detection results:
 
-![](logs/loss.jpg "loss")
-![](logs/celoss.jpg "celoss")
-![](logs/locloss.jpg "locloss")
+![](logs/loss.JPG "loss")
+![](logs/celoss.JPG "celoss")
+![](logs/locloss.JPG "locloss")
 ![](demo/demo1.jpg "demo1")
 ![](demo/demo2.jpg "demo2")
 ![](demo/demo3.jpg "demo3")
