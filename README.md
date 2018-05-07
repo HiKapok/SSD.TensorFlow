@@ -62,7 +62,7 @@ This implementation(SSD300-VGG16) yield **mAP 76.94%** on PASCAL VOC 2007 test d
 | sofa   | bird  | pottedplant | bus | diningtable | cow | bottle | horse | aeroplane | motorbike
 |:-------|:-----:|:-------:|:-------:|:-------:|:-------:|:-------:|:-------:|:-------:|:-------:|
 |  80.6  |  75.3 |  51.8   |   85.1  |   77.1    |  81.7 |  49.3  | 85.5  |   80.1    |   83.9   |
-| sheep  | train | boat    | bicycle | chair    | cat   | tvmonitor | person | car  | dog |
+| **sheep**  | **train** | **boat**    | **bicycle** | **chair**    | **cat**   | **tvmonitor** | **person** | **car**  | **dog** |
 |  79.1  |  86.4 |  70.3   |   82.5  |   61.9    | 87.8 |  73.7  | 78.5  |   82.7   |   85.5   |
 
 You can download the trained model(VOC07+12 Train) from [GoogleDrive](https://drive.google.com/open?id=1yeYcfcOURcZ4DaElEn9C2xY1NymGzG5W) for further research.
