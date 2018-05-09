@@ -1,4 +1,4 @@
-# Single Shot MultiBox Detector in TensorFlow
+# State-of-the-art Single Shot MultiBox Detector in TensorFlow
 
 This repository contains codes of the reimplementation of [SSD: Single Shot MultiBox Detector](https://arxiv.org/abs/1512.02325) in TensorFlow. If your goal is to reproduce the results in the original paper, please use the official [codes](https://github.com/weiliu89/caffe/tree/ssd).
 
@@ -51,13 +51,13 @@ There are already some TensorFlow based SSD reimplementation codes on GitHub, th
 	python simple_ssd_demo.py
 	```
 
-All the codes was tested under TensorFlow 1.6, Python 3.5, Ubuntu 16.04 with CUDA 8.0. The training is now still in processing, and the performance will be reported after the first training.
+All the codes was tested under TensorFlow 1.6, Python 3.5, Ubuntu 16.04 with CUDA 8.0. 
 
 This repo is just created recently, any contribution will be welcomed.
 
 ## Results (VOC07 Metric)
 
-This implementation(SSD300-VGG16) yield **mAP 76.94%** on PASCAL VOC 2007 test dataset, the details are as follows:
+This implementation(SSD300-VGG16) yield **mAP 76.94%** on PASCAL VOC 2007 test dataset(the original performance described in the paper is 77.2%mAP), the details are as follows:
 
 | sofa   | bird  | pottedplant | bus | diningtable | cow | bottle | horse | aeroplane | motorbike
 |:-------|:-----:|:-------:|:-------:|:-------:|:-------:|:-------:|:-------:|:-------:|:-------:|
