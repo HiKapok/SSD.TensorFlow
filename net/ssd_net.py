@@ -111,7 +111,7 @@ class VGG16Backbone(object):
     def l2_normalize(self, x, name):
         with tf.name_scope(name, "l2_normalize", [x]) as name:
             axis = -1 if self._data_format == 'channels_last' else 1
-            square_sum = tf.reduce_sum(tf.square(x), axis, keepdims=True)
+            square_sum = tf.reduce_sum(tf.square(x), axis, keep_dims=True)
             x_inv_norm = tf.rsqrt(tf.maximum(square_sum, 1e-10))
             return tf.multiply(x, x_inv_norm, name=name)
 

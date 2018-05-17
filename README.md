@@ -2,14 +2,15 @@
 
 This repository contains codes of the reimplementation of [SSD: Single Shot MultiBox Detector](https://arxiv.org/abs/1512.02325) in TensorFlow. If your goal is to reproduce the results in the original paper, please use the official [codes](https://github.com/weiliu89/caffe/tree/ssd).
 
-There are already some TensorFlow based SSD reimplementation codes on GitHub, the main special features of this repo inlcudes:
+There are already some TensorFlow based SSD reimplementation codes on GitHub, the main special features of this repo inlcude:
 
 - state of the art performance(77.8%mAP) when training from VGG-16 pre-trained model (SSD300-VGG16).
 - the model is trained using TensorFlow high level API [tf.estimator](https://www.tensorflow.org/api_docs/python/tf/estimator/Estimator). Although TensorFlow provides many APIs, the Estimator API is highly recommended to yield scalable, high-performance models. 
-- all codes were writen by TensorFlow ops (no numpy operation) to ensure the performance and portability.
+- all codes were writen by pure TensorFlow ops (no numpy operation) to ensure the performance and portability.
 - using ssd augmentation pipeline discribed in the original paper.
 - PyTorch-like model definition using high-level [tf.layers](https://www.tensorflow.org/api_docs/python/tf/layers) API for better readability ^-^.
 - high degree of modularity to ease futher development.
+- using replicate\_model\_fn makes it flexible to use one or more GPUs.
 
 ## ##
 ## Usage
