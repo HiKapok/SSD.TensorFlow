@@ -337,7 +337,7 @@ def ssd_random_sample_patch_wrapper(image, labels, bboxes):
       random_sample_image.set_shape([None, None, 3])
       return index+1, random_sample_image, labels, bboxes
 
-    [index, image, labels, bboxes] = tf.while_loop(condition, body, [index, image, labels, bboxes], parallel_iterations=4, back_prop=False, swap_memory=True)
+    [index, image, labels, bboxes] = tf.while_loop(condition, body, [index, orgi_image, orgi_labels, orgi_bboxes], parallel_iterations=4, back_prop=False, swap_memory=True)
 
     valid_mask = check_bboxes(bboxes)
     labels, bboxes = tf.boolean_mask(labels, valid_mask), tf.boolean_mask(bboxes, valid_mask)
