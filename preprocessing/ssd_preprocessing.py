@@ -324,7 +324,7 @@ def ssd_random_sample_patch_wrapper(image, labels, bboxes):
                             tf.logical_and((bboxes[:, 3] - bboxes[:, 1]) > 0.025, (bboxes[:, 2] - bboxes[:, 0]) > 0.025))
 
     index = 0
-    max_attempt = 3
+    max_attempt = 1
     def condition(index, image, labels, bboxes):
       return tf.logical_or(tf.logical_and(tf.reduce_sum(tf.cast(check_bboxes(bboxes), tf.int64)) < 1, tf.less(index, max_attempt)), tf.less(index, 1))
 
