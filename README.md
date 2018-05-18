@@ -60,7 +60,6 @@ All the codes was tested under TensorFlow 1.6, Python 3.5, Ubuntu 16.04 with CUD
 - now the training process should run perfectly
 
 
-
 This repo is just created recently, any contribution will be welcomed.
 
 ## Results (VOC07 Metric)
@@ -83,6 +82,12 @@ Here is the training logs and some detection results:
 ![](demo/demo1.jpg "demo1")
 ![](demo/demo2.jpg "demo2")
 ![](demo/demo3.jpg "demo3")
+
+## TODO
+
+- Adapting for CoCo Dataset
+- Update version SSD-512
+- Transfer to other backbone networks
 
 ## ##
 Apache License, Version 2.0
