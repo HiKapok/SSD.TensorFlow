@@ -52,4 +52,4 @@ def print_all_tensors_name(file_name):
                   "with SNAPPY.")
 
 if __name__ == "__main__":
-    print_all_tensors_name('./model/vgg16.ckpt')
+    print_all_tensors_name('./model/vgg16_reducedfc.ckpt')

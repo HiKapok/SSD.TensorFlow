@@ -118,6 +118,9 @@ tf.app.flags.DEFINE_string(
 tf.app.flags.DEFINE_boolean(
     'ignore_missing_vars', True,
     'When restoring a checkpoint would ignore missing variables.')
+tf.app.flags.DEFINE_boolean(
+    'multi_gpu', True,
+    'Whether there is GPU to use for training.')
 
 FLAGS = tf.app.flags.FLAGS
 #CUDA_VISIBLE_DEVICES
@@ -129,22 +132,24 @@ def validate_batch_size_for_multi_gpu(batch_size):
     directly. Multi-GPU support is currently experimental, however,
     so doing the work here until that feature is in place.
     """
-    from tensorflow.python.client import device_lib
+    if FLAGS.multi_gpu:
+        from tensorflow.python.client import device_lib
 
-    local_device_protos = device_lib.list_local_devices()
-    num_gpus = sum([1 for d in local_device_protos if d.device_type == 'GPU'])
-    if not num_gpus:
-        raise ValueError('Multi-GPU mode was specified, but no GPUs '
-                        'were found. To use CPU, run without --multi_gpu.')
+        local_device_protos = device_lib.list_local_devices()
+        num_gpus = sum([1 for d in local_device_protos if d.device_type == 'GPU'])
+        if not num_gpus:
+            raise ValueError('Multi-GPU mode was specified, but no GPUs '
+                            'were found. To use CPU, run --multi_gpu=False.')
 
-    remainder = batch_size % num_gpus
-    if remainder:
-        err = ('When running with multiple GPUs, batch size '
-                'must be a multiple of the number of available GPUs. '
-                'Found {} GPUs with a batch size of {}; try --batch_size={} instead.'
-                ).format(num_gpus, batch_size, batch_size - remainder)
-        raise ValueError(err)
-    return num_gpus
+        remainder = batch_size % num_gpus
+        if remainder:
+            err = ('When running with multiple GPUs, batch size '
+                    'must be a multiple of the number of available GPUs. '
+                    'Found {} GPUs with a batch size of {}; try --batch_size={} instead.'
+                    ).format(num_gpus, batch_size, batch_size - remainder)
+            raise ValueError(err)
+        return num_gpus
+    return 0
 
 def get_init_fn():
     return scaffolds.get_init_fn_for_scaffold(FLAGS.model_dir, FLAGS.checkpoint_path,
