@@ -75,6 +75,8 @@ This implementation(SSD300-VGG16) yield **mAP 77.8%** on PASCAL VOC 2007 test da
 
 You can download the trained model(VOC07+12 Train) from [GoogleDrive](https://drive.google.com/open?id=1yeYcfcOURcZ4DaElEn9C2xY1NymGzG5W) for further research.
 
+For Chinese friends, you can also download both the trained model and pre-trained vgg16 weights from [BaiduYun](https://pan.baidu.com/s/1kRhZd4p-N46JFpVkMgU3fg), access code: **tg64**.
+
 Here is the training logs and some detection results:
 
 ![](logs/loss.JPG "loss")
