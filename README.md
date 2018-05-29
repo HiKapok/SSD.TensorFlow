@@ -61,7 +61,7 @@ All the codes was tested under TensorFlow 1.6, Python 3.5, Ubuntu 16.04 with CUD
 - before you run 'eval_ssd.py', you should also remove [this line](https://github.com/HiKapok/SSD.TensorFlow/blob/e8296848b9f6eb585da5945d6b3ae099029ef4bf/eval_ssd.py#L369) because of the interface compatibility
 
 
-This repo is just created recently, any contribution will be welcomed.
+***This repo is just created recently, any contribution will be welcomed.***
 
 ## Results (VOC07 Metric)
 
@@ -91,6 +91,29 @@ Here is the training logs and some detection results:
 - Adapting for CoCo Dataset
 - Update version SSD-512
 - Transfer to other backbone networks
+
+## Known Issues
+
+- Got 'TypeError: Expected binary or unicode string, got None' while training
+  - Why: There maybe some inconsistent between different TensorFlow version.
+  - How: If you got this error, try change the default value of checkpoint_path to './model/vgg16.ckpt' in [train_ssd.py](https://github.com/HiKapok/SSD.TensorFlow/blob/86e3fa600d8d07122e9366ae664dea8c3c87c622/train_ssd.py#L107). For more information [issue6](https://github.com/HiKapok/SSD.TensorFlow/issues/6) and [issue9](https://github.com/HiKapok/SSD.TensorFlow/issues/9).
+- Nan loss during training
+  - Why: This is caused by the default learning rate which is a little higher in some TensorFlow version. 
+  - How: I don't know the details about the different behavior between different versions. There two workaround:
+  	- Adding warm-up: change some codes [here](https://github.com/HiKapok/SSD.TensorFlow/blob/d9cf250df81c8af29985c03d76636b2b8b19f089/train_ssd.py#L99) to the following snippet:
+
+	```python
+	tf.app.flags.DEFINE_string(
+    'decay_boundaries', '2000, 80000, 100000',
+    'Learning rate decay boundaries by global_step (comma-separated list).')
+	tf.app.flags.DEFINE_string(
+    'lr_decay_factors', '0.1, 1, 0.1, 0.01',
+    'The values of learning_rate decay factor for each segment between boundaries (comma-separated list).')
+	```
+	- Lower the learning rate and run more steps until convergency. 
+- Why this re-implementation perform better than the reported performance
+  - I don't know
+
 
 ## ##
 Apache License, Version 2.0
