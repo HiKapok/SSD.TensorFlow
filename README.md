@@ -75,7 +75,7 @@ This implementation(SSD300-VGG16) yield **mAP 77.8%** on PASCAL VOC 2007 test da
 
 You can download the trained model(VOC07+12 Train) from [GoogleDrive](https://drive.google.com/open?id=1yeYcfcOURcZ4DaElEn9C2xY1NymGzG5W) for further research.
 
-For Chinese friends, you can also download both the trained model and pre-trained vgg16 weights from [BaiduYun](https://pan.baidu.com/s/1kRhZd4p-N46JFpVkMgU3fg), access code: **tg64**.
+For Chinese friends, you can also download both the trained model and pre-trained vgg16 weights from [BaiduYun Drive](https://pan.baidu.com/s/1kRhZd4p-N46JFpVkMgU3fg), access code: **tg64**.
 
 Here is the training logs and some detection results:
 
@@ -86,7 +86,7 @@ Here is the training logs and some detection results:
 ![](demo/demo2.jpg "demo2")
 ![](demo/demo3.jpg "demo3")
 
-## TODO
+## *Too Busy* TODO
 
 - Adapting for CoCo Dataset
 - Update version SSD-512
@@ -98,8 +98,8 @@ Here is the training logs and some detection results:
   - Why: There maybe some inconsistent between different TensorFlow version.
   - How: If you got this error, try change the default value of checkpoint_path to './model/vgg16.ckpt' in [train_ssd.py](https://github.com/HiKapok/SSD.TensorFlow/blob/86e3fa600d8d07122e9366ae664dea8c3c87c622/train_ssd.py#L107). For more information [issue6](https://github.com/HiKapok/SSD.TensorFlow/issues/6) and [issue9](https://github.com/HiKapok/SSD.TensorFlow/issues/9).
 - Nan loss during training
-  - Why: This is caused by the default learning rate which is a little higher in some TensorFlow version. 
-  - How: I don't know the details about the different behavior between different versions. There two workaround:
+  - Why: This is caused by the default learning rate which is a little higher for some TensorFlow version. 
+  - How: I don't know the details about the different behavior between different versions. There are two workarounds:
   	- Adding warm-up: change some codes [here](https://github.com/HiKapok/SSD.TensorFlow/blob/d9cf250df81c8af29985c03d76636b2b8b19f089/train_ssd.py#L99) to the following snippet:
 
 	```python
