@@ -53,7 +53,7 @@ tf.app.flags.DEFINE_string('output_directory', '/media/rs/7A0EE8880EE83EAF/Detec
                            'Output data directory')
 tf.app.flags.DEFINE_integer('train_shards', 16,
                             'Number of shards in training TFRecord files.')
-tf.app.flags.DEFINE_integer('validation_shards', 1600,
+tf.app.flags.DEFINE_integer('validation_shards', 16,
                             'Number of shards in validation TFRecord files.')
 tf.app.flags.DEFINE_integer('num_threads', 8,
                             'Number of threads to preprocess the images.')
