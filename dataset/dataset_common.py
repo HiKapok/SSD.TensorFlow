@@ -221,17 +221,17 @@ def slim_get_batch(num_classes, batch_size, split_name, file_pattern, num_reader
         gbboxes_raw = tf.boolean_mask(gbboxes_raw, isdifficult_mask)
 
     # Pre-processing image, labels and bboxes.
-
+    tensors_to_batch = []
     if is_training:
         image, glabels, gbboxes = image_preprocessing_fn(org_image, glabels_raw, gbboxes_raw)
+        gt_targets, gt_labels, gt_scores = anchor_encoder(glabels, gbboxes)
+        tensors_to_batch = [image, filename, shape, gt_targets, gt_labels, gt_scores]
     else:
-        image = image_preprocessing_fn(org_image, glabels_raw, gbboxes_raw)
-        glabels, gbboxes = glabels_raw, gbboxes_raw
+        image, output_shape = image_preprocessing_fn(org_image, glabels_raw, gbboxes_raw)
+        tensors_to_batch = [image, filename, shape, output_shape]
 
-    gt_targets, gt_labels, gt_scores = anchor_encoder(glabels, gbboxes)
-
-    return tf.train.batch([image, filename, shape, gt_targets, gt_labels, gt_scores],
-                    dynamic_pad=False,
+    return tf.train.batch(tensors_to_batch,
+                    dynamic_pad=(not is_training),
                     batch_size=batch_size,
                     allow_smaller_final_batch=(not is_training),
                     num_threads=num_preprocessing_threads,

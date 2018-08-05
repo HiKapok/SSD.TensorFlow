@@ -43,13 +43,13 @@ import dataset_common
        |    |->Annotations/
        |    |->...
 '''
-tf.app.flags.DEFINE_string('dataset_directory', '/media/rs/7A0EE8880EE83EAF/Detections/PASCAL/VOC',
+tf.app.flags.DEFINE_string('dataset_directory', './dataset/VOC',
                            'All datas directory')
 tf.app.flags.DEFINE_string('train_splits', 'VOC2007, VOC2012',
                            'Comma-separated list of the training data sub-directory')
 tf.app.flags.DEFINE_string('validation_splits', 'VOC2007TEST',
                            'Comma-separated list of the validation data sub-directory')
-tf.app.flags.DEFINE_string('output_directory', '/media/rs/7A0EE8880EE83EAF/Detections/SSD/dataset/tfrecords',
+tf.app.flags.DEFINE_string('output_directory', './dataset/tfrecords',
                            'Output data directory')
 tf.app.flags.DEFINE_integer('train_shards', 16,
                             'Number of shards in training TFRecord files.')
@@ -228,7 +228,7 @@ def _find_image_bounding_boxes(directory, cur_record):
   difficult = []
   truncated = []
   for obj in root.findall('object'):
-      label = obj.find('name').text
+      label = obj.find('name').text.strip()
       labels.append(int(dataset_common.VOC_LABELS[label][0]))
       labels_text.append(label.encode('ascii'))
 
@@ -245,10 +245,10 @@ def _find_image_bounding_boxes(directory, cur_record):
           truncated.append(0)
 
       bbox = obj.find('bndbox')
-      bboxes.append((float(bbox.find('ymin').text) / shape[0],
-                     float(bbox.find('xmin').text) / shape[1],
-                     float(bbox.find('ymax').text) / shape[0],
-                     float(bbox.find('xmax').text) / shape[1]
+      bboxes.append((float(bbox.find('ymin').text) - 1.,
+                     float(bbox.find('xmin').text) - 1.,
+                     float(bbox.find('ymax').text) - 1.,
+                     float(bbox.find('xmax').text) - 1.
                      ))
   return bboxes, labels, labels_text, difficult, truncated
 

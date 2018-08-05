@@ -56,8 +56,11 @@ tf.app.flags.DEFINE_integer(
     'save_summary_steps', 500,
     'The frequency with which summaries are saved, in seconds.')
 tf.app.flags.DEFINE_integer(
-    'save_checkpoints_secs', 7200,
+    'save_checkpoints_secs', 7200, # not used
     'The frequency with which the model is saved, in seconds.')
+tf.app.flags.DEFINE_integer(
+    'save_checkpoints_steps', 20000,
+    'The frequency with which the model is saved, in steps.')
 # model related configuration
 tf.app.flags.DEFINE_integer(
     'train_image_size', 300,
@@ -165,26 +168,37 @@ global_anchor_info = dict()
 
 def input_pipeline(dataset_pattern='train-*', is_training=True, batch_size=FLAGS.batch_size):
     def input_fn():
-        out_shape = [FLAGS.train_image_size] * 2
-        anchor_creator = anchor_manipulator.AnchorCreator(out_shape,
-                                                    layers_shapes = [(38, 38), (19, 19), (10, 10), (5, 5), (3, 3), (1, 1)],
-                                                    anchor_scales = [(0.1,), (0.2,), (0.375,), (0.55,), (0.725,), (0.9,)],
-                                                    extra_anchor_scales = [(0.1414,), (0.2739,), (0.4541,), (0.6315,), (0.8078,), (0.9836,)],
-                                                    anchor_ratios = [(2., .5), (2., 3., .5, 0.3333), (2., 3., .5, 0.3333), (2., 3., .5, 0.3333), (2., .5), (2., .5)],
-                                                    layer_steps = [8, 16, 32, 64, 100, 300])
-        all_anchors, all_num_anchors_depth, all_num_anchors_spatial = anchor_creator.get_all_anchors()
+        target_shape = [FLAGS.train_image_size] * 2
 
-        num_anchors_per_layer = []
-        for ind in range(len(all_anchors)):
-            num_anchors_per_layer.append(all_num_anchors_depth[ind] * all_num_anchors_spatial[ind])
+        anchor_encoder_decoder = anchor_manipulator.AnchorEncoder(positive_threshold = FLAGS.match_threshold,
+                                                        ignore_threshold = FLAGS.neg_threshold,
+                                                        prior_scaling=[0.1, 0.1, 0.2, 0.2])
 
-        anchor_encoder_decoder = anchor_manipulator.AnchorEncoder(allowed_borders = [1.0] * 6,
-                                                            positive_threshold = FLAGS.match_threshold,
-                                                            ignore_threshold = FLAGS.neg_threshold,
-                                                            prior_scaling=[0.1, 0.1, 0.2, 0.2])
+        all_anchor_scales = [(30.,), (60.,), (112.5,), (165.,), (217.5,), (270.,)]
+        all_extra_scales = [(42.43,), (82.17,), (136.23,), (189.45,), (242.34,), (295.08,)]
+        all_anchor_ratios = [(2., .5), (2., 3., .5, 0.3333), (2., 3., .5, 0.3333), (2., 3., .5, 0.3333), (2., .5), (2., .5)]
+        all_layer_shapes = [(38, 38), (19, 19), (10, 10), (5, 5), (3, 3), (1, 1)]
+        all_layer_strides = [8, 16, 32, 64, 100, 300]
+        total_layers = len(all_layer_shapes)
+        anchors_height = list()
+        anchors_width = list()
+        anchors_depth = list()
+        for ind in range(total_layers):
+            _anchors_height, _anchors_width, _anchor_depth = anchor_encoder_decoder.get_anchors_width_height(all_anchor_scales[ind], all_extra_scales[ind], all_anchor_ratios[ind], name='get_anchors_width_height{}'.format(ind))
+            anchors_height.append(_anchors_height)
+            anchors_width.append(_anchors_width)
+            anchors_depth.append(_anchor_depth)
+        anchors_ymin, anchors_xmin, anchors_ymax, anchors_xmax, inside_mask = anchor_encoder_decoder.get_all_anchors(target_shape, anchors_height, anchors_width, anchors_depth,
+                                                                        [0.5] * total_layers, all_layer_shapes, all_layer_strides,
+                                                                        [FLAGS.train_image_size * 1.] * total_layers, [False] * total_layers)
 
-        image_preprocessing_fn = lambda image_, labels_, bboxes_ : ssd_preprocessing.preprocess_image(image_, labels_, bboxes_, out_shape, is_training=is_training, data_format=FLAGS.data_format, output_rgb=False)
-        anchor_encoder_fn = lambda glabels_, gbboxes_: anchor_encoder_decoder.encode_all_anchors(glabels_, gbboxes_, all_anchors, all_num_anchors_depth, all_num_anchors_spatial)
+        num_anchors_per_layer = list()
+        for ind, layer_shape in enumerate(all_layer_shapes):
+            _, _num_anchors_per_layer = anchor_encoder_decoder.get_anchors_count(anchors_depth[ind], layer_shape, name='get_anchor_count{}'.format(ind))
+            num_anchors_per_layer.append(_num_anchors_per_layer)
+
+        image_preprocessing_fn = lambda image_, labels_, bboxes_ : ssd_preprocessing.preprocess_image(image_, labels_, bboxes_, target_shape, is_training=is_training, data_format=FLAGS.data_format, output_rgb=False)
+        anchor_encoder_fn = lambda glabels_, gbboxes_: anchor_encoder_decoder.encode_anchors(glabels_, gbboxes_, anchors_ymin, anchors_xmin, anchors_ymax, anchors_xmax, inside_mask)
 
         image, _, shape, loc_targets, cls_targets, match_scores = dataset_common.slim_get_batch(FLAGS.num_classes,
                                                                                 batch_size,
@@ -197,9 +211,9 @@ def input_pipeline(dataset_pattern='train-*', is_training=True, batch_size=FLAGS
                                                                                 num_epochs=FLAGS.train_epochs,
                                                                                 is_training=is_training)
         global global_anchor_info
-        global_anchor_info = {'decode_fn': lambda pred : anchor_encoder_decoder.decode_all_anchors(pred, num_anchors_per_layer),
+        global_anchor_info = {'decode_fn': lambda pred : anchor_encoder_decoder.batch_decode_anchors(pred, anchors_ymin, anchors_xmin, anchors_ymax, anchors_xmax),
                             'num_anchors_per_layer': num_anchors_per_layer,
-                            'all_num_anchors_depth': all_num_anchors_depth }
+                            'all_num_anchors_depth': anchors_depth }
 
         return image, {'shape': shape, 'loc_targets': loc_targets, 'cls_targets': cls_targets, 'match_scores': match_scores}
     return input_fn
@@ -288,12 +302,9 @@ def ssd_model_fn(features, labels, mode, params):
         with tf.control_dependencies([cls_pred, location_pred]):
             with tf.name_scope('post_forward'):
                 #bboxes_pred = decode_fn(location_pred)
-                bboxes_pred = tf.map_fn(lambda _preds : decode_fn(_preds),
-                                        tf.reshape(location_pred, [tf.shape(features)[0], -1, 4]),
-                                        dtype=[tf.float32] * len(num_anchors_per_layer), back_prop=False)
+                bboxes_pred = decode_fn(tf.reshape(location_pred, [tf.shape(features)[0], -1, 4]))
                 #cls_targets = tf.Print(cls_targets, [tf.shape(bboxes_pred[0]),tf.shape(bboxes_pred[1]),tf.shape(bboxes_pred[2]),tf.shape(bboxes_pred[3])])
-                bboxes_pred = [tf.reshape(preds, [-1, 4]) for preds in bboxes_pred]
-                bboxes_pred = tf.concat(bboxes_pred, axis=0)
+                bboxes_pred = tf.reshape(bboxes_pred, [-1, 4])
 
                 flaten_cls_targets = tf.reshape(cls_targets, [-1])
                 flaten_match_scores = tf.reshape(match_scores, [-1])
@@ -308,8 +319,8 @@ def ssd_model_fn(features, labels, mode, params):
                 batch_negtive_mask = tf.equal(cls_targets, 0)#tf.logical_and(tf.equal(cls_targets, 0), match_scores > 0.)
                 batch_n_negtives = tf.count_nonzero(batch_negtive_mask, -1)
 
-                batch_n_neg_select = tf.cast(params['negative_ratio'] * tf.cast(batch_n_positives, tf.float32), tf.int32)
-                batch_n_neg_select = tf.minimum(batch_n_neg_select, tf.cast(batch_n_negtives, tf.int32))
+                batch_n_neg_select = tf.to_int32(params['negative_ratio'] * tf.to_float(batch_n_positives))
+                batch_n_neg_select = tf.minimum(batch_n_neg_select, tf.to_int32(batch_n_negtives))
 
                 # hard negative mining for classification
                 predictions_for_bg = tf.nn.softmax(tf.reshape(cls_pred, [tf.shape(features)[0], -1, params['num_classes']]))[:, :, 0]
@@ -416,8 +427,8 @@ def main(_):
 
     # Set up a RunConfig to only save checkpoints once per training cycle.
     run_config = tf.estimator.RunConfig().replace(
-                                        save_checkpoints_secs=FLAGS.save_checkpoints_secs).replace(
-                                        save_checkpoints_steps=None).replace(
+                                        save_checkpoints_secs=None).replace(
+                                        save_checkpoints_steps=FLAGS.save_checkpoints_steps).replace(
                                         save_summary_steps=FLAGS.save_summary_steps).replace(
                                         keep_checkpoint_max=5).replace(
                                         tf_random_seed=FLAGS.tf_random_seed).replace(

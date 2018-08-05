@@ -102,7 +102,7 @@ def slim_get_split(file_pattern='{}_????'):
     return save_image_op
 
 if __name__ == '__main__':
-    save_image_op = slim_get_split('/media/rs/7A0EE8880EE83EAF/Detections/SSD/dataset/tfrecords/*')
+    save_image_op = slim_get_split('./dataset/tfrecords/*')
     # Create the graph, etc.
     init_op = tf.group([tf.local_variables_initializer(), tf.local_variables_initializer(), tf.tables_initializer()])
 

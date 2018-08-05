@@ -31,5 +31,5 @@ def count_split_examples(split_path, file_prefix='.tfrecord'):
     return num_samples
 
 if __name__ == '__main__':
-    print('train:', count_split_examples('/media/rs/7A0EE8880EE83EAF/Detections/SSD/dataset/tfrecords', 'train-?????-of-?????'))
-    print('val:', count_split_examples('/media/rs/7A0EE8880EE83EAF/Detections/SSD/dataset/tfrecords', 'val-?????-of-?????'))
+    print('train:', count_split_examples('./dataset/tfrecords', 'train-?????-of-?????'))
+    print('val:', count_split_examples('./dataset/tfrecords', 'val-?????-of-?????'))

@@ -34,7 +34,7 @@ VOC2007TEST
     ...
     ImageSets
 '''
-dataset_path = '/media/rs/7A0EE8880EE83EAF/Detections/PASCAL/VOC/VOC2007TEST'
+dataset_path = './dataset/VOC/VOC2007TEST'
 # change above path according to your system settings
 pred_path = './logs/predict'
 pred_file = 'results_{}.txt' # from 1-num_classes

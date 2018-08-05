@@ -27,6 +27,21 @@ report:
 More information can be obtained from the VGG website:
 www.robots.ox.ac.uk/~vgg/research/very_deep/
 """
+# ==============================================================================
+# Copyright 2018 Changan Wang
+
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+
+#     http://www.apache.org/licenses/LICENSE-2.0
+
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# =============================================================================
 
 from __future__ import absolute_import
 from __future__ import division
@@ -156,7 +171,7 @@ def ssd_random_sample_patch(image, labels, bboxes, ratio_list=[0.1, 0.3, 0.5, 0.
 
       def body(index, sampled_width, sampled_height, width, height):
         sampled_width = tf.random_uniform([1], minval=0.3, maxval=0.999, dtype=tf.float32)[0] * width
-        sampled_height = tf.random_uniform([1], minval=0.3, maxval=0.999, dtype=tf.float32)[0] *height
+        sampled_height = tf.random_uniform([1], minval=0.3, maxval=0.999, dtype=tf.float32)[0] * height
 
         return index+1, sampled_width, sampled_height, width, height
 
@@ -171,30 +186,31 @@ def ssd_random_sample_patch(image, labels, bboxes, ratio_list=[0.1, 0.3, 0.5, 0.
       int_xmin = tf.maximum(roi[1], bboxes[:, 1])
       int_ymax = tf.minimum(roi[2], bboxes[:, 2])
       int_xmax = tf.minimum(roi[3], bboxes[:, 3])
-      h = tf.maximum(int_ymax - int_ymin, 0.)
-      w = tf.maximum(int_xmax - int_xmin, 0.)
+      h = tf.maximum(int_ymax - int_ymin + 1., 0.)
+      w = tf.maximum(int_xmax - int_xmin + 1., 0.)
       inter_vol = h * w
-      union_vol = (roi[3] - roi[1]) * (roi[2] - roi[0]) + ((bboxes[:, 2] - bboxes[:, 0]) * (bboxes[:, 3] - bboxes[:, 1]) - inter_vol)
+      union_vol = (roi[3] - roi[1] + 1.) * (roi[2] - roi[0] + 1.) + ((bboxes[:, 2] - bboxes[:, 0] + 1.) * (bboxes[:, 3] - bboxes[:, 1] + 1.) - inter_vol)
       jaccard = tf.div(inter_vol, union_vol)
       return jaccard
 
   def areas(bboxes):
     with tf.name_scope('bboxes_areas'):
-      vol = (bboxes[:, 3] - bboxes[:, 1]) * (bboxes[:, 2] - bboxes[:, 0])
+      vol = (bboxes[:, 3] - bboxes[:, 1] + 1.) * (bboxes[:, 2] - bboxes[:, 0] + 1.)
       return vol
 
   def check_roi_center(width, height, labels, bboxes):
     with tf.name_scope('check_roi_center'):
       index = 0
       max_attempt = 20
-      roi = [0., 0., 0., 0.]
-      float_width = tf.cast(width, tf.float32)
-      float_height = tf.cast(height, tf.float32)
+      float_width = tf.to_float(width)
+      float_height = tf.to_float(height)
+      roi = [0., 0., float_height - 1., float_width - 1.]
+
       mask = tf.cast(tf.zeros_like(labels, dtype=tf.uint8), tf.bool)
       center_x, center_y = (bboxes[:, 1] + bboxes[:, 3]) / 2, (bboxes[:, 0] + bboxes[:, 2]) / 2
 
       def condition(index, roi, mask):
-        return tf.logical_or(tf.logical_and(tf.reduce_sum(tf.cast(mask, tf.int32)) < 1,
+        return tf.logical_or(tf.logical_and(tf.reduce_sum(tf.to_int32(mask)) < 1,
                                           tf.less(index, max_attempt)),
                             tf.less(index, 1))
 
@@ -204,10 +220,7 @@ def ssd_random_sample_patch(image, labels, bboxes, ratio_list=[0.1, 0.3, 0.5, 0.
         x = tf.random_uniform([], minval=0, maxval=width - sampled_width, dtype=tf.int32)
         y = tf.random_uniform([], minval=0, maxval=height - sampled_height, dtype=tf.int32)
 
-        roi = [tf.cast(y, tf.float32) / float_height,
-              tf.cast(x, tf.float32) / float_width,
-              tf.cast(y + sampled_height, tf.float32) / float_height,
-              tf.cast(x + sampled_width, tf.float32) / float_width]
+        roi = [tf.to_float(y), tf.to_float(x), tf.to_float(y + sampled_height), tf.to_float(x + sampled_width)]
 
         mask_min = tf.logical_and(tf.greater(center_y, roi[0]), tf.greater(center_x, roi[1]))
         mask_max = tf.logical_and(tf.less(center_y, roi[2]), tf.less(center_x, roi[3]))
@@ -225,12 +238,15 @@ def ssd_random_sample_patch(image, labels, bboxes, ratio_list=[0.1, 0.3, 0.5, 0.
     with tf.name_scope('check_roi_overlap'):
       index = 0
       max_attempt = 50
-      roi = [0., 0., 1., 1.]
+      float_width = tf.to_float(width)
+      float_height = tf.to_float(height)
+      roi = [0., 0., float_height - 1., float_width - 1.]
+
       mask_labels = labels
       mask_bboxes = bboxes
 
       def condition(index, roi, mask_labels, mask_bboxes):
-        return tf.logical_or(tf.logical_or(tf.logical_and(tf.reduce_sum(tf.cast(jaccard_with_anchors(roi, mask_bboxes) < min_iou, tf.int32)) > 0,
+        return tf.logical_or(tf.logical_or(tf.logical_and(tf.reduce_sum(tf.to_int32(jaccard_with_anchors(roi, mask_bboxes) < min_iou)) > 0,
                                                         tf.less(index, max_attempt)),
                                           tf.less(index, 1)),
                             tf.less(tf.shape(mask_labels)[0], 1))
@@ -242,11 +258,8 @@ def ssd_random_sample_patch(image, labels, bboxes, ratio_list=[0.1, 0.3, 0.5, 0.
       [index, roi, mask_labels, mask_bboxes] = tf.while_loop(condition, body, [index, roi, mask_labels, mask_bboxes], parallel_iterations=16, back_prop=False, swap_memory=True)
 
       return tf.cond(tf.greater(tf.shape(mask_labels)[0], 0),
-                  lambda : (tf.cast([roi[0] * tf.cast(height, tf.float32),
-                            roi[1] * tf.cast(width, tf.float32),
-                            (roi[2] - roi[0]) * tf.cast(height, tf.float32),
-                            (roi[3] - roi[1]) * tf.cast(width, tf.float32)], tf.int32), mask_labels, mask_bboxes),
-                  lambda : (tf.cast([0, 0, height, width], tf.int32), labels, bboxes))
+                  lambda : (tf.to_int32([roi[0], roi[1], roi[2] - roi[0] + 1., roi[3] - roi[1] + 1.]), mask_labels, mask_bboxes),
+                  lambda : (tf.to_int32([0., 0., float_height, float_width]), labels, bboxes))
 
 
   def sample_patch(image, labels, bboxes, min_iou):
@@ -255,27 +268,21 @@ def ssd_random_sample_patch(image, labels, bboxes, ratio_list=[0.1, 0.3, 0.5, 0.
 
       roi_slice_range, mask_labels, mask_bboxes = check_roi_overlap(width, height, labels, bboxes, min_iou)
 
-      scale = tf.cast(tf.stack([height, width, height, width]), mask_bboxes.dtype)
-      mask_bboxes = mask_bboxes * scale
-
       # Add offset.
       offset = tf.cast(tf.stack([roi_slice_range[0], roi_slice_range[1], roi_slice_range[0], roi_slice_range[1]]), mask_bboxes.dtype)
       mask_bboxes = mask_bboxes - offset
 
       cliped_ymin = tf.maximum(0., mask_bboxes[:, 0])
       cliped_xmin = tf.maximum(0., mask_bboxes[:, 1])
-      cliped_ymax = tf.minimum(tf.cast(roi_slice_range[2], tf.float32), mask_bboxes[:, 2])
-      cliped_xmax = tf.minimum(tf.cast(roi_slice_range[3], tf.float32), mask_bboxes[:, 3])
+      cliped_ymax = tf.minimum(tf.to_float(roi_slice_range[2]) - 1., mask_bboxes[:, 2])
+      cliped_xmax = tf.minimum(tf.to_float(roi_slice_range[3]) - 1., mask_bboxes[:, 3])
 
       mask_bboxes = tf.stack([cliped_ymin, cliped_xmin, cliped_ymax, cliped_xmax], axis=-1)
-      # Rescale to target dimension.
-      scale = tf.cast(tf.stack([roi_slice_range[2], roi_slice_range[3],
-                                roi_slice_range[2], roi_slice_range[3]]), mask_bboxes.dtype)
 
       return tf.cond(tf.logical_or(tf.less(roi_slice_range[2], 1), tf.less(roi_slice_range[3], 1)),
                   lambda: (image, labels, bboxes),
                   lambda: (tf.slice(image, [roi_slice_range[0], roi_slice_range[1], 0], [roi_slice_range[2], roi_slice_range[3], -1]),
-                                  mask_labels, mask_bboxes / scale))
+                                  mask_labels, mask_bboxes))
 
   with tf.name_scope('ssd_random_sample_patch'):
     image = tf.convert_to_tensor(image, name='image')
@@ -310,53 +317,21 @@ def ssd_random_expand(image, bboxes, ratio=2., name=None):
                           tf.pad(image[:, :, 1], paddings, "CONSTANT", constant_values = mean_color_of_image[1]),
                           tf.pad(image[:, :, 2], paddings, "CONSTANT", constant_values = mean_color_of_image[2])], axis=-1)
 
-    scale = tf.cast(tf.stack([height, width, height, width]), bboxes.dtype)
-    absolute_bboxes = bboxes * scale + tf.cast(tf.stack([y, x, y, x]), bboxes.dtype)
-
-    return big_canvas, absolute_bboxes / tf.cast(tf.stack([canvas_height, canvas_width, canvas_height, canvas_width]), bboxes.dtype)
-
-# def ssd_random_sample_patch_wrapper(image, labels, bboxes):
-#   with tf.name_scope('ssd_random_sample_patch_wrapper'):
-#     orgi_image, orgi_labels, orgi_bboxes = image, labels, bboxes
-#     def check_bboxes(bboxes):
-#       areas = (bboxes[:, 3] - bboxes[:, 1]) * (bboxes[:, 2] - bboxes[:, 0])
-#       return tf.logical_and(tf.logical_and(areas < 0.9, areas > 0.001),
-#                             tf.logical_and((bboxes[:, 3] - bboxes[:, 1]) > 0.025, (bboxes[:, 2] - bboxes[:, 0]) > 0.025))
-
-#     index = 0
-#     max_attempt = 3
-#     def condition(index, image, labels, bboxes):
-#       return tf.logical_or(tf.logical_and(tf.reduce_sum(tf.cast(check_bboxes(bboxes), tf.int64)) < 1, tf.less(index, max_attempt)), tf.less(index, 1))
-
-#     def body(index, image, labels, bboxes):
-#       image, bboxes = tf.cond(tf.random_uniform([], minval=0., maxval=1., dtype=tf.float32) < 0.5,
-#                       lambda: (image, bboxes),
-#                       lambda: ssd_random_expand(image, bboxes, tf.random_uniform([1], minval=1.1, maxval=4., dtype=tf.float32)[0]))
-#       # Distort image and bounding boxes.
-#       random_sample_image, labels, bboxes = ssd_random_sample_patch(image, labels, bboxes, ratio_list=[-0.1, 0.1, 0.3, 0.5, 0.7, 0.9, 1.])
-#       random_sample_image.set_shape([None, None, 3])
-#       return index+1, random_sample_image, labels, bboxes
-
-#     [index, image, labels, bboxes] = tf.while_loop(condition, body, [index, orgi_image, orgi_labels, orgi_bboxes], parallel_iterations=4, back_prop=False, swap_memory=True)
-
-#     valid_mask = check_bboxes(bboxes)
-#     labels, bboxes = tf.boolean_mask(labels, valid_mask), tf.boolean_mask(bboxes, valid_mask)
-#     return tf.cond(tf.less(index, max_attempt),
-#                 lambda : (image, labels, bboxes),
-#                 lambda : (orgi_image, orgi_labels, orgi_bboxes))
+    return big_canvas, bboxes + tf.cast(tf.stack([y, x, y, x]), bboxes.dtype)
 
 def ssd_random_sample_patch_wrapper(image, labels, bboxes):
   with tf.name_scope('ssd_random_sample_patch_wrapper'):
     orgi_image, orgi_labels, orgi_bboxes = image, labels, bboxes
-    def check_bboxes(bboxes):
-      areas = (bboxes[:, 3] - bboxes[:, 1]) * (bboxes[:, 2] - bboxes[:, 0])
-      return tf.logical_and(tf.logical_and(areas < 0.9, areas > 0.001),
-                            tf.logical_and((bboxes[:, 3] - bboxes[:, 1]) > 0.025, (bboxes[:, 2] - bboxes[:, 0]) > 0.025))
+    def check_bboxes(image, bboxes):
+      image_shape = tf.shape(image)
+      areas = (bboxes[:, 3] - bboxes[:, 1] + 1.) * (bboxes[:, 2] - bboxes[:, 0] + 1.)
+      return tf.logical_and(tf.logical_and(areas > 64., areas < tf.to_float(image_shape[0] * image_shape[1]) * 0.96),
+                        tf.logical_and((bboxes[:, 3] - bboxes[:, 1] + 1.) > 5., (bboxes[:, 2] - bboxes[:, 0] + 1.) > 5.))
 
     index = 0
     max_attempt = 3
     def condition(index, image, labels, bboxes, orgi_image, orgi_labels, orgi_bboxes):
-      return tf.logical_or(tf.logical_and(tf.reduce_sum(tf.cast(check_bboxes(bboxes), tf.int64)) < 1, tf.less(index, max_attempt)), tf.less(index, 1))
+      return tf.logical_or(tf.logical_and(tf.reduce_sum(tf.cast(check_bboxes(image, bboxes), tf.int64)) < 1, tf.less(index, max_attempt)), tf.less(index, 1))
 
     def body(index, image, labels, bboxes, orgi_image, orgi_labels, orgi_bboxes):
       image, bboxes = tf.cond(tf.random_uniform([], minval=0., maxval=1., dtype=tf.float32) < 0.5,
@@ -369,7 +344,7 @@ def ssd_random_sample_patch_wrapper(image, labels, bboxes):
 
     [index, image, labels, bboxes, orgi_image, orgi_labels, orgi_bboxes] = tf.while_loop(condition, body, [index,  image, labels, bboxes, orgi_image, orgi_labels, orgi_bboxes], parallel_iterations=4, back_prop=False, swap_memory=True)
 
-    valid_mask = check_bboxes(bboxes)
+    valid_mask = check_bboxes(image, bboxes)
     labels, bboxes = tf.boolean_mask(labels, valid_mask), tf.boolean_mask(bboxes, valid_mask)
     return tf.cond(tf.less(index, max_attempt),
                 lambda : (image, labels, bboxes),
@@ -407,8 +382,11 @@ def _mean_image_subtraction(image, means):
     channels[i] -= means[i]
   return tf.concat(axis=2, values=channels)
 
-def unwhiten_image(image):
+def unwhiten_image(image, output_rgb=True):
   means=[_R_MEAN, _G_MEAN, _B_MEAN]
+  if not output_rgb:
+    image_channels = tf.unstack(image, axis=-1, name='split_bgr')
+    image = tf.stack([image_channels[2], image_channels[1], image_channels[0]], axis=-1, name='merge_rgb')
   num_channels = image.get_shape().as_list()[-1]
   channels = tf.split(axis=2, num_or_size_splits=num_channels, value=image)
   for i in range(num_channels):
@@ -417,13 +395,15 @@ def unwhiten_image(image):
 
 def random_flip_left_right(image, bboxes):
   with tf.name_scope('random_flip_left_right'):
+    float_width = tf.to_float(_ImageDimensions(image, rank=3)[1])
+
     uniform_random = tf.random_uniform([], 0, 1.0)
     mirror_cond = tf.less(uniform_random, .5)
     # Flip image.
     result = tf.cond(mirror_cond, lambda: tf.image.flip_left_right(image), lambda: image)
     # Flip bboxes.
-    mirror_bboxes = tf.stack([bboxes[:, 0], 1 - bboxes[:, 3],
-                              bboxes[:, 2], 1 - bboxes[:, 1]], axis=-1)
+    mirror_bboxes = tf.stack([bboxes[:, 0], float_width - 1. - bboxes[:, 3],
+                              bboxes[:, 2], float_width - 1. - bboxes[:, 1]], axis=-1)
     bboxes = tf.cond(mirror_cond, lambda: mirror_bboxes, lambda: bboxes)
     return result, bboxes
 
@@ -463,6 +443,13 @@ def preprocess_for_train(image, labels, bboxes, out_shape, data_format='channels
     # Randomly flip the image horizontally.
     random_sample_flip_image, bboxes = random_flip_left_right(random_sample_image, bboxes)
     # Rescale to VGG input scale.
+    height, width, _ = _ImageDimensions(random_sample_flip_image, rank=3)
+    float_height, float_width = tf.to_float(height), tf.to_float(width)
+    ymin, xmin, ymax, xmax = tf.unstack(bboxes, 4, axis=-1)
+    target_height, target_width = tf.to_float(out_shape[0]), tf.to_float(out_shape[1])
+    ymin, ymax = ymin * target_height / float_height, ymax * target_height / float_height
+    xmin, xmax = xmin * target_width / float_width, xmax * target_width / float_width
+    bboxes = tf.stack([ymin, xmin, ymax, xmax], axis=-1)
     random_sample_flip_resized_image = tf.image.resize_images(random_sample_flip_image, out_shape, method=tf.image.ResizeMethod.BILINEAR, align_corners=False)
     random_sample_flip_resized_image.set_shape([None, None, 3])
 
@@ -489,8 +476,12 @@ def preprocess_for_eval(image, out_shape, data_format='channels_first', scope='s
   """
   with tf.name_scope(scope, 'ssd_preprocessing_eval', [image]):
     image = tf.to_float(image)
-    image = tf.image.resize_images(image, out_shape, method=tf.image.ResizeMethod.BILINEAR, align_corners=False)
-    image.set_shape(out_shape + [3])
+    if out_shape is not None:
+      image = tf.image.resize_images(image, out_shape, method=tf.image.ResizeMethod.BILINEAR, align_corners=False)
+      image.set_shape(out_shape + [3])
+
+    height, width, _ = _ImageDimensions(image, rank=3)
+    output_shape = tf.stack([height, width])
 
     image = _mean_image_subtraction(image, [_R_MEAN, _G_MEAN, _B_MEAN])
     if not output_rgb:
@@ -499,7 +490,7 @@ def preprocess_for_eval(image, out_shape, data_format='channels_first', scope='s
     # Image data format.
     if data_format == 'channels_first':
       image = tf.transpose(image, perm=(2, 0, 1))
-    return image
+    return image, output_shape
 
 def preprocess_image(image, labels, bboxes, out_shape, is_training=False, data_format='channels_first', output_rgb=True):
   """Preprocesses the given image.

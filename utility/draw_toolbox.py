@@ -13,7 +13,6 @@
 # limitations under the License.
 # =============================================================================
 import cv2
-import matplotlib.cm as mpcm
 
 from dataset import dataset_common
 
@@ -35,8 +34,9 @@ def colors_subselect(colors, num_classes=21):
         else:
             sub_colors.append([c for c in color])
     return sub_colors
+# import matplotlib.cm as mpcm
+# colors = colors_subselect(mpcm.plasma.colors, num_classes=21)
 
-colors = colors_subselect(mpcm.plasma.colors, num_classes=21)
 colors_tableau = [(255, 255, 255), (31, 119, 180), (174, 199, 232), (255, 127, 14), (255, 187, 120),
                  (44, 160, 44), (152, 223, 138), (214, 39, 40), (255, 152, 150),
                  (148, 103, 189), (197, 176, 213), (140, 86, 75), (196, 156, 148),
@@ -53,8 +53,8 @@ def bboxes_draw_on_img(img, classes, scores, bboxes, thickness=2):
         bbox = bboxes[i]
         color = colors_tableau[classes[i]]
         # Draw bounding boxes
-        p1 = (int(bbox[0] * shape[0]), int(bbox[1] * shape[1]))
-        p2 = (int(bbox[2] * shape[0]), int(bbox[3] * shape[1]))
+        p1 = (int(round(bbox[0])), int(round(bbox[1])))
+        p2 = (int(round(bbox[2])), int(round(bbox[3])))
         if (p2[0] - p1[0] < 1) or (p2[1] - p1[1] < 1):
             continue
 
