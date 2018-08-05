@@ -12,7 +12,7 @@ There are already some TensorFlow based SSD reimplementation codes on GitHub, th
 - high degree of modularity to ease futher development.
 - using replicate\_model\_fn makes it flexible to use one or more GPUs.
 
-***New Update(77.4%mAP): using absolute bbox coordinates instead of normalized coordinates, checkout [here](https://github.com/HiKapok/SSD.TensorFlow/tree/AbsoluteCoord). ***
+***New Update(77.4%mAP): using absolute bbox coordinates instead of normalized coordinates, checkout [here](https://github.com/HiKapok/SSD.TensorFlow/tree/AbsoluteCoord).***
 
 ## ##
 ## Usage
