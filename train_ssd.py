@@ -100,10 +100,10 @@ tf.app.flags.DEFINE_float(
     'The minimal end learning rate used by a polynomial decay learning rate.')
 # for learning rate piecewise_constant decay
 tf.app.flags.DEFINE_string(
-    'decay_boundaries', '80000, 100000',
+    'decay_boundaries', '1000, 80000, 100000',
     'Learning rate decay boundaries by global_step (comma-separated list).')
 tf.app.flags.DEFINE_string(
-    'lr_decay_factors', '1, 0.1, 0.01',
+    'lr_decay_factors', '0.1, 1, 0.1, 0.01',
     'The values of learning_rate decay factor for each segment between boundaries (comma-separated list).')
 # checkpoint related configuration
 tf.app.flags.DEFINE_string(
@@ -176,7 +176,7 @@ def input_pipeline(dataset_pattern='train-*', is_training=True, batch_size=FLAGS
 
         all_anchor_scales = [(30.,), (60.,), (112.5,), (165.,), (217.5,), (270.,)]
         all_extra_scales = [(42.43,), (82.17,), (136.23,), (189.45,), (242.34,), (295.08,)]
-        all_anchor_ratios = [(2., .5), (2., 3., .5, 0.3333), (2., 3., .5, 0.3333), (2., 3., .5, 0.3333), (2., .5), (2., .5)]
+        all_anchor_ratios = [(1., 2., .5), (1., 2., 3., .5, 0.3333), (1., 2., 3., .5, 0.3333), (1., 2., 3., .5, 0.3333), (1., 2., .5), (1., 2., .5)]
         all_layer_shapes = [(38, 38), (19, 19), (10, 10), (5, 5), (3, 3), (1, 1)]
         all_layer_strides = [8, 16, 32, 64, 100, 300]
         total_layers = len(all_layer_shapes)

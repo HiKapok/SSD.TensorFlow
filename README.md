@@ -4,8 +4,8 @@ This repository contains codes of the reimplementation of [SSD: Single Shot Mult
 
 There are already some TensorFlow based SSD reimplementation codes on GitHub, the main special features of this repo inlcude:
 
-- state of the art performance(77.4%mAP) when training from VGG-16 pre-trained model (SSD300-VGG16).
-- the model is trained using TensorFlow high level API [tf.estimator](https://www.tensorflow.org/api_docs/python/tf/estimator/Estimator). Although TensorFlow provides many APIs, the Estimator API is highly recommended to yield scalable, high-performance models. 
+- state of the art performance(77.9%mAP) when training from VGG-16 pre-trained model (SSD300-VGG16).
+- the model is trained using TensorFlow high level API [tf.estimator](https://www.tensorflow.org/api_docs/python/tf/estimator/Estimator). Although TensorFlow provides many APIs, the Estimator API is highly recommended to yield scalable, high-performance models.
 - all codes were writen by pure TensorFlow ops (no numpy operation) to ensure the performance and portability.
 - using ssd augmentation pipeline discribed in the original paper.
 - PyTorch-like model definition using high-level [tf.layers](https://www.tensorflow.org/api_docs/python/tf/layers) API for better readability ^-^.
@@ -23,7 +23,7 @@ There are already some TensorFlow based SSD reimplementation codes on GitHub, th
 		   |    |->...
 		   |->VOC2012/
 		   |    |->Annotations/
-		   |    |->ImageSets/ 
+		   |    |->ImageSets/
 		   |    |->...
 		   |->VOC2007TEST/
 		   |    |->Annotations/
@@ -38,13 +38,13 @@ There are already some TensorFlow based SSD reimplementation codes on GitHub, th
 - Run the following script to start training:
 
 	```sh
-	python train_ssd.py 
+	python train_ssd.py
 	```
 - Run the following script for evaluation and get mAP:
 
 	```sh
-	python eval_ssd.py 
-	python voc_eval.py 
+	python eval_ssd.py
+	python voc_eval.py
 	```
 	Note: you need first modify some directory in voc_eval.py.
 - Run the following script for visualization:
@@ -65,13 +65,13 @@ All the codes was tested under TensorFlow 1.6, Python 3.5, Ubuntu 16.04 with CUD
 
 ## Results (VOC07 Metric)
 
-This implementation(SSD300-VGG16) yield **mAP 77.4%** on PASCAL VOC 2007 test dataset(the original performance described in the paper is 77.2%mAP), the details are as follows:
+This implementation(SSD300-VGG16) yield **mAP 77.9%** on PASCAL VOC 2007 test dataset(the original performance described in the paper is 77.2%mAP), the details are as follows:
 
 | sofa   | bird  | pottedplant | bus | diningtable | cow | bottle | horse | aeroplane | motorbike
 |:-------|:-----:|:-------:|:-------:|:-------:|:-------:|:-------:|:-------:|:-------:|:-------:|
-|  78.8  |  76.3 |  53.3   |   86.2  |   77.7    |  83.0 |  52.7  | 85.5  |   82.3    |   82.2   |
+|  80.1  |  75.9 |  54.1   |   85.4  |   77.8    |  85.2 |  48.7  | 85.8  |   83.6    |   82.3   |
 | **sheep**  | **train** | **boat**    | **bicycle** | **chair**    | **cat**   | **tvmonitor** | **person** | **car**  | **dog** |
-|  77.2  |  87.3 |  69.7   |   83.3  |   59.0    | 88.2 |  74.6  | 79.6  |   84.8   |   85.1   |
+|  80.3  |  85.9 |  71.6   |   83.7  |   62.6    | 89.0 |  74.8  | 79.3  |   85.6   |   86.6   |
 
 You can download the trained model(VOC07+12 Train) from [GoogleDrive](https://drive.google.com/open?id=1sr3khWzrXZtcS5mmkQDL00y07Rj7erW5) for further research.
 
@@ -98,19 +98,19 @@ Here is the training logs and some detection results:
   - Why: There maybe some inconsistent between different TensorFlow version.
   - How: If you got this error, try change the default value of checkpoint_path to './model/vgg16.ckpt' in [train_ssd.py](https://github.com/HiKapok/SSD.TensorFlow/blob/86e3fa600d8d07122e9366ae664dea8c3c87c622/train_ssd.py#L107). For more information [issue6](https://github.com/HiKapok/SSD.TensorFlow/issues/6) and [issue9](https://github.com/HiKapok/SSD.TensorFlow/issues/9).
 - Nan loss during training
-  - Why: This is caused by the default learning rate which is a little higher for some TensorFlow version. 
+  - Why: This is caused by the default learning rate which is a little higher for some TensorFlow version.
   - How: I don't know the details about the different behavior between different versions. There are two workarounds:
   	- Adding warm-up: change some codes [here](https://github.com/HiKapok/SSD.TensorFlow/blob/d9cf250df81c8af29985c03d76636b2b8b19f089/train_ssd.py#L99) to the following snippet:
 
 	```python
 	tf.app.flags.DEFINE_string(
-    'decay_boundaries', '2000, 80000, 100000',
+    'decay_boundaries', '1000, 80000, 100000',
     'Learning rate decay boundaries by global_step (comma-separated list).')
 	tf.app.flags.DEFINE_string(
     'lr_decay_factors', '0.1, 1, 0.1, 0.01',
     'The values of learning_rate decay factor for each segment between boundaries (comma-separated list).')
 	```
-	- Lower the learning rate and run more steps until convergency. 
+	- Lower the learning rate and run more steps until convergency.
 - Why this re-implementation perform better than the reported performance
   - I don't know
 
