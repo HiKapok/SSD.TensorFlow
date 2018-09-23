@@ -314,7 +314,7 @@ def ssd_model_fn(features, labels, mode, params):
                 positive_mask = flaten_cls_targets > 0
                 n_positives = tf.count_nonzero(positive_mask)
 
-                batch_n_positives = tf.count_nonzero(cls_targets, -1)
+                batch_n_positives = tf.count_nonzero(cls_targets > 0, -1)
 
                 batch_negtive_mask = tf.equal(cls_targets, 0)#tf.logical_and(tf.equal(cls_targets, 0), match_scores > 0.)
                 batch_n_negtives = tf.count_nonzero(batch_negtive_mask, -1)
