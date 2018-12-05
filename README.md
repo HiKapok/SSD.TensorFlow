@@ -116,6 +116,23 @@ Here is the training logs and some detection results:
 - Why this re-implementation perform better than the reported performance
   - I don't know
 
+## Citation
+
+Use this bibtex to cite this repository:
+```
+@misc{kapok_ssd_2018,
+  title={Single Shot MultiBox Detector in TensorFlow},
+  author={Changan Wang},
+  year={2018},
+  publisher={Github},
+  journal={GitHub repository},
+  howpublished={\url{https://github.com/HiKapok/SSD.TensorFlow}},
+}
+```
+
+## Discussion
+
+Welcome to join in QQ Group(758790869) for more discussion
 
 ## ##
 Apache License, Version 2.0
